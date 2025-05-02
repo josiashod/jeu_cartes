@@ -1,8 +1,9 @@
+import "@/app/globals.css";
 import { useRouter } from 'next/router';
 import { useState } from 'react';
-import io from 'socket.io-client';
+import { getSocket } from '@/lib/socket';
 
-const socket = io();
+const socket = getSocket();
 
 export default function JoinChannel() {
   const router = useRouter();

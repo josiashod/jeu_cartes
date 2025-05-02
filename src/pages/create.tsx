@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
+import "@/app/globals.css";
 import { io } from 'socket.io-client';
 
 const socket = io();

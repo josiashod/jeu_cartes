@@ -1,9 +1,40 @@
-import Image from "next/image";
+"use client";
+// import Image from "next/image";
+import { getSocket } from '@/lib/socket';
+import { useRouter } from 'next/navigation';
+
+const socket = getSocket();
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
+  const router = useRouter();
+    // useEffect(() => {
 
+    //   // socket.on('connectsocket', (data) => {
+    //   //   console.log('connected', data)
+    //   // })
+
+    //   return () => {
+    //     // socket.off('connectsocket')
+    //   }
+    // }, [])
+
+  const generateChannel = () => {
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    // Inform the server about the new channel
+    socket.emit('create_channel', code);
+    localStorage.setItem('channelCode', code);
+    router.push(`/join?channel=${code}`);
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center h-screen">
+      <h1 className="text-2xl font-bold mb-4">Create a private game play room</h1>
+      <button
+        onClick={generateChannel}
+        className="px-4 py-2 bg-blue-500 text-white rounded mb-4"
+      >
+        Générer un canal 
+      </button>
     </div>
   );
 }

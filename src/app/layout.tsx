@@ -1,20 +1,13 @@
 "use client";
 
 import { metadata } from './metadata';
-import { Geist, Geist_Mono } from "next/font/google";
+import { Space_Mono } from "next/font/google";
 import "./globals.css";
-import { useEffect } from 'react';
-import { io } from 'socket.io-client';
-import { getSocket } from '@/lib/socket';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const spaceMono = Space_Mono({
+  variable: "--font-space-mono",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["400", "700"],
 });
 
 export default function RootLayout({
@@ -22,22 +15,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  useEffect(() => {
-    const socket = getSocket();
-
-    socket.on('connectsocket', (data) => {
-      console.log('connected', data)
-    })
-
-    return () => {
-      socket.off('connectsocket')
-    }
-  }, [])
-
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${spaceMono.variable} antialiased`}
       >
         {children}
       </body>
