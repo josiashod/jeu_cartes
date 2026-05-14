@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
 import "@/app/globals.css";
-import { io } from 'socket.io-client';
-
-const socket = io();
+import { getSocket } from '@/lib/socket';
 
 export default function CreateChannel() {
   const [channelCode, setChannelCode] = useState('');
@@ -15,6 +13,7 @@ export default function CreateChannel() {
     localStorage.setItem('channelCode', code);
 
     // Inform the server about the new channel
+    const socket = getSocket();
     socket.emit('create_channel', code);
   };
 

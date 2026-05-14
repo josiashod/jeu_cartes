@@ -1,8 +1,6 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
-import io from 'socket.io-client';
-
-const socket = io();
+import { getSocket } from '@/lib/socket';
 
 export default function Channel() {
   const router = useRouter();
@@ -10,6 +8,8 @@ export default function Channel() {
   const [users, setUsers] = useState<string[]>([]);
 
   useEffect(() => {
+    const socket = getSocket();
+
     socket.emit('get_users', channel);
 
     socket.on('update_users', (userList) => {
