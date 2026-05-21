@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import RulesButton from '@/components/RulesButton';
+import CardPosterBackground from '@/components/CardPosterBackground';
 
 export default function Home() {
   const [roomCode, setRoomCode] = useState('');
@@ -17,17 +19,13 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{
-      background: 'radial-gradient(ellipse at 60% 40%, #1a5e30 0%, #0d3d1f 55%, #071a0e 100%)',
+      background: '#020617',
       position: 'relative', overflow: 'hidden',
     }}>
-      {/* Felt texture overlay */}
-      <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'4\' height=\'4\' viewBox=\'0 0 4 4\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Ccircle cx=\'1\' cy=\'1\' r=\'0.6\' fill=\'rgba(255,255,255,0.025)\'/%3E%3C/svg%3E")',
-        opacity: 0.8,
-      }} />
+      <CardPosterBackground />
 
-      <header className="px-6 py-4 flex justify-end relative z-10">
+      <header className="px-6 py-4 flex justify-end gap-3 relative z-10">
+        <RulesButton />
         <LanguageSwitcher />
       </header>
 
@@ -50,7 +48,7 @@ export default function Home() {
                 textShadow: '0 0 12px rgba(245,158,11,0.7)',
               }}>♦</span>
             </span>
-            P<span style={{ color: '#4ade80' }}>♣</span>
+            P<span style={{ color: '#4ade80', marginLeft: '-0.176em' }}>♠</span>
           </h1>
           <div className="mx-auto mt-4 rounded-full"
             style={{ width: 52, height: 2, background: 'rgba(255,255,255,0.2)' }} />

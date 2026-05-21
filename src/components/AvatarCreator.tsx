@@ -23,18 +23,19 @@ function Arr({ dir, onClick, color }: { dir: '‹' | '›'; onClick: () => void;
       onMouseUp={() => setDown(false)}
       onMouseLeave={() => setDown(false)}
       style={{
-        width: 32, height: 32, borderRadius: 8,
+        width: 34, height: 34, borderRadius: 10,
         border: `2.5px solid #111`,
         background: '#fff',
         cursor: 'pointer',
         fontWeight: 900,
-        fontSize: 22,
-        lineHeight: 1,
+        fontSize: 26,
+        lineHeight: '30px',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 0,
         transform: down ? 'translateY(2px)' : 'none',
         boxShadow: down ? `0 1px 0 #111` : `0 3px 0 #111`,
         transition: 'transform 0.06s, box-shadow 0.06s',
-        color: '#111',
+        color,
         userSelect: 'none',
         flexShrink: 0,
       }}
@@ -62,7 +63,7 @@ export default function AvatarCreator({ value, onChange }: AvatarCreatorProps) {
   // In the 100x100 viewBox:
   // Eyes at y≈42 → pixel = 42/100 * AV ≈ 62
   // Mouth at y≈68 → pixel = 68/100 * AV ≈ 101
-  const eyeTop  = Math.round((42 / 100) * AV) - 16; // center button on eye
+  const eyeTop = Math.round((42 / 100) * AV) - 17; // center button on eye
   const mouthTop = Math.round((68 / 100) * AV) - 16;
 
   return (
@@ -77,18 +78,18 @@ export default function AvatarCreator({ value, onChange }: AvatarCreatorProps) {
         </div>
 
         {/* ── Yeux ── */}
-        <div style={{ position: 'absolute', left: 0, top: eyeTop, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+        <div style={{ position: 'absolute', left: 0, top: eyeTop, display: 'flex', alignItems: 'center' }}>
           <Arr dir="‹" color="#60A5FA" onClick={() => update('eyes', (config.eyes - 1 + EYE_COUNT) % EYE_COUNT)} />
         </div>
-        <div style={{ position: 'absolute', right: 0, top: eyeTop + 18, display: 'flex', alignItems: 'center' }}>
+        <div style={{ position: 'absolute', right: 0, top: eyeTop, display: 'flex', alignItems: 'center' }}>
           <Arr dir="›" color="#60A5FA" onClick={() => update('eyes', (config.eyes + 1) % EYE_COUNT)} />
         </div>
 
         {/* ── Bouche ── */}
-        <div style={{ position: 'absolute', left: 0, top: mouthTop, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+        <div style={{ position: 'absolute', left: 0, top: mouthTop, display: 'flex', alignItems: 'center' }}>
           <Arr dir="‹" color="#F87171" onClick={() => update('mouth', (config.mouth - 1 + MOUTH_COUNT) % MOUTH_COUNT)} />
         </div>
-        <div style={{ position: 'absolute', right: 0, top: mouthTop + 18, display: 'flex', alignItems: 'center' }}>
+        <div style={{ position: 'absolute', right: 0, top: mouthTop, display: 'flex', alignItems: 'center' }}>
           <Arr dir="›" color="#F87171" onClick={() => update('mouth', (config.mouth + 1) % MOUTH_COUNT)} />
         </div>
       </div>

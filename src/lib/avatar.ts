@@ -10,11 +10,9 @@ export type AvatarConfig = {
 export const DEFAULT_AVATAR: AvatarConfig = { face: 0, eyes: 0, brows: 0, mouth: 0, acc: 0, accColor: 0 };
 
 export const FACE_COLORS = [
-  '#F472B6', // Pink
+  '#4ADE80', // Green
   '#60A5FA', // Blue
   '#FBBF24', // Yellow
-  '#4ADE80', // Green
-  '#C084FC', // Purple
   '#FB923C', // Orange
   '#F87171', // Red
   '#2DD4BF', // Teal

@@ -9,10 +9,11 @@ import { AvatarDisplay } from './AvatarDisplay';
 // ── Constantes ────────────────────────────────────────────────────────────────
 const CW = 0.72;
 const CH = 1.01;
-const PLAYER_TILT    = 0.74;  // inclinaison cartes joueur (vers caméra)
-const PLAYER_Y       = 0.28;  // hauteur centre carte joueur
-const PLAYER_Z       = 1.35;  // profondeur main joueur (plus haut dans la vue)
-const OPPONENT_TILT  = 0.58;  // inclinaison cartes adversaire (aussi debout)
+const PLAYER_TILT    = 0.96;  // inclinaison cartes joueur (vers caméra)
+const PLAYER_Y       = 0.92;  // hauteur centre carte joueur
+const PLAYER_Z       = 2.9;   // profondeur main joueur, proche de la caméra
+const OPPONENT_TILT  = 0.76;  // inclinaison cartes adversaire (aussi debout)
+type VisibleMode = 'current' | 'last' | 'empty';
 
 const SYM: Record<CardSuit, string> = {
   [CardSuit.Spade]: '♠', [CardSuit.Heart]: '♥',
@@ -178,7 +179,7 @@ function FaceCard({
   const matRef = useRef<THREE.MeshStandardMaterial>(null!);
   const hoveredRef = useRef(false);
   const texture = useMemo(() => getFaceTex(card.value, card.suit), [card.value, card.suit]);
-  const baseY = pos[1] + zIndex * 0.002;
+  const baseY = pos[1] + zIndex * 0.006;
 
   useFrame(() => {
     if (!meshRef.current || !matRef.current) return;
@@ -222,7 +223,7 @@ function BackCard({ pos, fanAngle = 0, tilt = 0, zIndex = 0, isHighlighted }: Ba
   const meshRef = useRef<THREE.Mesh>(null!);
   const matRef = useRef<THREE.MeshStandardMaterial>(null!);
   const texture = useMemo(() => getBackTex(), []);
-  const baseY = pos[1] + zIndex * 0.002;
+  const baseY = pos[1] + zIndex * 0.006;
 
   useFrame(() => {
     if (!meshRef.current || !matRef.current) return;
@@ -254,6 +255,32 @@ function fanLayout(n: number, zBase: number) {
   });
 }
 
+function playerHandLayout(n: number) {
+  const spread = Math.min(1.95, Math.max(0.48, n * 0.34));
+
+  return Array.from({ length: n }, (_, i) => {
+    const t = n <= 1 ? 0 : (i - (n - 1) / 2) / ((n - 1) / 2);
+    return {
+      x: t * spread,
+      z: PLAYER_Z,
+      angle: t * 0.045,
+    };
+  });
+}
+
+function opponentHandLayout(n: number) {
+  const spread = Math.min(1.75, Math.max(0.44, n * 0.31));
+
+  return Array.from({ length: n }, (_, i) => {
+    const t = n <= 1 ? 0 : (i - (n - 1) / 2) / ((n - 1) / 2);
+    return {
+      x: t * spread,
+      z: 0,
+      angle: t * 0.035,
+    };
+  });
+}
+
 // ── Main du joueur ────────────────────────────────────────────────────────────
 interface PlayerHandProps {
   hand: Card[];
@@ -263,7 +290,7 @@ interface PlayerHandProps {
 }
 
 export function PlayerHand({ hand, isMyTurn, onPlayCard, onHoverCard }: PlayerHandProps) {
-  const layout = useMemo(() => fanLayout(hand.length, PLAYER_Z), [hand.length]);
+  const layout = useMemo(() => playerHandLayout(hand.length), [hand.length]);
   if (hand.length === 0) return null;
   return (
     <group>
@@ -296,7 +323,7 @@ interface OpponentHandProps {
 
 export function OpponentHand({ count, basePos, hoveredIndex, mirrorAngle, player }: OpponentHandProps) {
   const n = Math.max(1, count);
-  const layout = useMemo(() => fanLayout(n, 0), [n]);
+  const layout = useMemo(() => opponentHandLayout(n), [n]);
   return (
     <group>
       {layout.map(({ x, z, angle }, i) => (
@@ -335,22 +362,39 @@ export function OpponentHand({ count, basePos, hoveredIndex, mirrorAngle, player
 }
 
 // ── Pli en cours ──────────────────────────────────────────────────────────────
-interface TrickAreaProps { plays: PlayedCard[]; players: PublicSipaPlayer[]; }
-function TrickArea({ plays }: TrickAreaProps) {
+interface TrickAreaProps {
+  plays: PlayedCard[];
+  mode: VisibleMode;
+  winnerId?: string;
+  me?: PublicSipaPlayer;
+  opponents: PublicSipaPlayer[];
+}
+
+function getPlayerAnchor(playerId: string | undefined, me: PublicSipaPlayer | undefined, opponents: PublicSipaPlayer[]): [number, number, number] {
+  if (!playerId) return [0, 0.16, -0.18];
+  if (me?.id === playerId) return [0, 0.22, 1.02];
+  const index = opponents.findIndex((player) => player.id === playerId);
+  const positions = opponentPositions(opponents.length);
+  return positions[index] ?? [0, 0.16, -0.18];
+}
+
+function TrickArea({ plays, mode, winnerId, me, opponents }: TrickAreaProps) {
   if (plays.length === 0) return null;
   const n = plays.length;
+  const anchor = mode === 'last' ? getPlayerAnchor(winnerId, me, opponents) : [0, 0.46, -0.18] as [number, number, number];
   return (
     <group>
       {plays.map((play, i) => {
         const a = (i / n) * Math.PI * 2;
-        const r = Math.min(0.45, n * 0.11);
+        const r = mode === 'last' ? Math.min(0.62, n * 0.16) : Math.min(0.54, n * 0.13);
         const scatter = Math.sin(i * 7.3) * 0.07;
-        const x = Math.sin(a) * r + scatter;
-        const z = -Math.cos(a) * r * 0.55;
+        const x = anchor[0] + Math.sin(a) * r + scatter;
+        const y = anchor[1] + (mode === 'last' ? 0.18 : 0);
+        const z = anchor[2] - Math.cos(a) * r * 0.55;
         return play.hidden ? (
-          <BackCard key={play.playerId} pos={[x, 0.01, z]} fanAngle={scatter * 0.5} zIndex={i} />
+          <BackCard key={play.playerId} pos={[x, y, z]} fanAngle={scatter * 0.5} zIndex={i} />
         ) : (
-          <FaceCard key={play.playerId} card={play.card} pos={[x, 0.01 + i * 0.003, z]} fanAngle={scatter * 0.5} zIndex={i} />
+          <FaceCard key={play.playerId} card={play.card} pos={[x, y + i * 0.003, z]} fanAngle={scatter * 0.5} zIndex={i} />
         );
       })}
     </group>
@@ -376,9 +420,40 @@ function TrickPile({ count }: { count: number }) {
   );
 }
 
+// ── Cartes remportées par le joueur courant ──────────────────────────────────
+function MyWonPile({ plays }: { plays: PlayedCard[] }) {
+  if (plays.length === 0) return null;
+
+  return (
+    <group position={[2.15, 0.38, 1.16]}>
+      {plays.slice(-16).map((play, i) => {
+        const column = i % 4;
+        const row = Math.floor(i / 4);
+        const jitterX = Math.sin(i * 2.37) * 0.11;
+        const jitterZ = Math.cos(i * 1.91) * 0.08;
+
+        return (
+          <FaceCard
+            key={`${play.playerId}-${play.card.id}-${i}`}
+            card={play.card}
+            pos={[
+              column * 0.22 + jitterX,
+              i * 0.004,
+              row * -0.22 + jitterZ,
+            ]}
+            fanAngle={-0.5 + (i % 7) * 0.16}
+            tilt={0.1}
+            zIndex={i}
+          />
+        );
+      })}
+    </group>
+  );
+}
+
 // ── Positions adversaires ─────────────────────────────────────────────────────
 function opponentPositions(n: number): [number, number, number][] {
-  const y = 0.32; // raised to keep card bottom above table when tilted
+  const y = 0.78; // raised to keep cards above the table plane
   if (n === 1) return [[0, y, -3.0]];
   if (n === 2) return [[-2.2, y, -2.4], [2.2, y, -2.4]];
   return [[-2.8, y, -1.5], [0, y, -3.2], [2.8, y, -1.5]];
@@ -390,6 +465,9 @@ export interface GameSceneProps {
   opponents: PublicSipaPlayer[];
   isMyTurn: boolean;
   visiblePlays: PlayedCard[];
+  visibleMode: VisibleMode;
+  visibleWinnerId?: string;
+  myWonPlays: PlayedCard[];
   completedTricksCount: number;
   opponentHovers: Record<string, number | null>;
   onPlayCard: (cardId: string) => void;
@@ -397,7 +475,7 @@ export interface GameSceneProps {
 }
 
 // ── Scène ─────────────────────────────────────────────────────────────────────
-function Scene({ me, opponents, isMyTurn, visiblePlays, completedTricksCount, opponentHovers, onPlayCard, onHoverCard }: GameSceneProps) {
+function Scene({ me, opponents, isMyTurn, visiblePlays, visibleMode, visibleWinnerId, myWonPlays, completedTricksCount, opponentHovers, onPlayCard, onHoverCard }: GameSceneProps) {
   const positions = useMemo(() => opponentPositions(opponents.length), [opponents.length]);
 
   return (
@@ -410,7 +488,8 @@ function Scene({ me, opponents, isMyTurn, visiblePlays, completedTricksCount, op
 
       <FeltTable />
       <TrickPile count={completedTricksCount} />
-      <TrickArea plays={visiblePlays} players={[...(me ? [me] : []), ...opponents]} />
+      <MyWonPile plays={myWonPlays} />
+      <TrickArea plays={visiblePlays} mode={visibleMode} winnerId={visibleWinnerId} me={me} opponents={opponents} />
 
       {opponents.map((opp, idx) => (
         <OpponentHand

@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import AvatarCreator from '@/components/AvatarCreator';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import RulesButton from '@/components/RulesButton';
+import CardPosterBackground from '@/components/CardPosterBackground';
 import { encodeAvatar, DEFAULT_AVATAR } from '@/lib/avatar';
 
-const FELT_BG = 'radial-gradient(ellipse at 60% 40%, #1a5e30 0%, #0d3d1f 55%, #071a0e 100%)';
 const GLASS = {
   background: 'rgba(255,255,255,0.07)',
   backdropFilter: 'blur(20px)',
@@ -43,15 +44,17 @@ export default function JoinChannel() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: FELT_BG, position: 'relative' }}>
-      {/* Texture */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.6' fill='rgba(255,255,255,0.025)'/%3E%3C/svg%3E\")" }} />
+    <div className="min-h-screen" style={{ background: '#020617', position: 'relative', overflow: 'hidden' }}>
+      <CardPosterBackground />
 
       <header className="px-6 py-4 flex justify-between items-center relative z-10">
         <button onClick={() => router.push('/')} className="font-semibold text-sm flex items-center gap-2 hover:opacity-70" style={{ color: 'rgba(255,255,255,0.6)' }}>
           ← {t('common.back')}
         </button>
-        <LanguageSwitcher />
+        <div className="flex items-center gap-3">
+          <RulesButton />
+          <LanguageSwitcher />
+        </div>
       </header>
 
       <main className="flex items-center justify-center px-4 py-8 relative z-10">

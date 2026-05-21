@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { useLanguage } from '@/contexts/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import RulesButton from '@/components/RulesButton';
 import { AvatarDisplay } from '@/components/AvatarDisplay';
 import { Player, GameSettings } from '@/types';
 
@@ -125,7 +126,10 @@ export default function Lobby() {
             Salon
           </span>
         </div>
-        <LanguageSwitcher />
+        <div className="flex items-center gap-3">
+          <RulesButton />
+          <LanguageSwitcher />
+        </div>
       </header>
 
       <main className="px-4 py-6 relative z-10">

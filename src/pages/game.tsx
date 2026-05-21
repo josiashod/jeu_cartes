@@ -6,6 +6,7 @@ import { getSocket } from "@/lib/socket";
 import { CardSuit, PublicSipaGameState } from "@/game";
 import type { GameSceneProps } from "@/components/GameScene";
 import { AvatarDisplay } from "@/components/AvatarDisplay";
+import RulesButton from "@/components/RulesButton";
 
 // Chargé uniquement côté client (Three.js ne supporte pas SSR)
 const GameScene = dynamic(() => import("@/components/GameScene"), { ssr: false });
@@ -40,7 +41,7 @@ function RoundEndModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="w-full max-w-sm rounded-2xl overflow-hidden animate-scaleIn"
-        style={{ background: "var(--white-panel)", border: "2px solid var(--cream-border)", boxShadow: "0 32px 80px rgba(0,0,0,0.6)" }}>
+        style={{ background: "rgba(255,255,255,0.96)", border: "2px solid rgba(255,255,255,0.72)" }}>
 
         <div className="px-6 py-5 text-center border-b-2" style={{ background: "var(--green-primary)", borderColor: "var(--green-dark)" }}>
           <div className="text-3xl mb-1">{isFinished ? "🏆" : "🎴"}</div>
@@ -64,25 +65,35 @@ function RoundEndModal({
           </div>
         )}
 
-        <div className="px-5 py-3 space-y-2.5">
-          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Scores</p>
+        <div className="px-5 py-4 space-y-3">
+          <p className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--green-dark)" }}>Recap des points</p>
           {sortedPlayers.map((player, rank) => {
             const pct = Math.min(100, Math.round((player.score / targetScore) * 100));
             const isLeader = rank === 0 && player.score > 0;
             return (
-              <div key={player.id}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-sm flex items-center gap-1.5"
-                    style={{ color: player.id === socketId ? "var(--green-primary)" : "var(--text-dark)" }}>
-                    {isLeader && <span style={{ color: "var(--gold)" }}>★</span>}
-                    <AvatarDisplay emoji={player.emoji} size={22} />
-                    {player.username}
-                  </span>
-                  <span className="font-black text-sm" style={{ color: "var(--green-primary)" }}>
-                    {player.score} / {targetScore}
-                  </span>
+              <div
+                key={player.id}
+                className="overflow-hidden rounded-xl"
+                style={{
+                  background: isLeader ? "rgba(245,158,11,0.13)" : player.id === socketId ? "rgba(24,163,84,0.1)" : "#fff",
+                  border: "1px solid rgba(17,24,39,0.1)",
+                }}
+              >
+                <div className="flex items-center gap-3 px-3 py-2">
+                  <AvatarDisplay emoji={player.emoji} size={40} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-black" style={{ color: "var(--text-dark)" }}>
+                      {isLeader ? "★ " : ""}{player.username}
+                    </p>
+                    <p className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>
+                      Objectif {targetScore} pts
+                    </p>
+                  </div>
+                  <div className="text-3xl font-black leading-none" style={{ color: isLeader ? "var(--gold-dark)" : "var(--green-dark)" }}>
+                    {player.score}
+                  </div>
                 </div>
-                <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--cream-border)" }}>
+                <div className="h-2 overflow-hidden" style={{ background: "var(--cream-border)" }}>
                   <div className="h-full rounded-full transition-all duration-500"
                     style={{ width: `${pct}%`, background: isLeader ? "var(--gold)" : "var(--green-primary)" }} />
                 </div>
@@ -196,16 +207,17 @@ export default function Game() {
 
   // Cartes visibles sur la table
   const visiblePlays = gameState
-    ? (gameState.currentTrick.length > 0
-        ? gameState.currentTrick
-        : (gameState.completedTricks.at(-1)?.plays ?? []))
+    ? gameState.currentTrick
     : [];
   const visibleMode = gameState
-    ? (gameState.currentTrick.length > 0 ? "current" : gameState.completedTricks.length > 0 ? "last" : "empty")
+    ? (gameState.currentTrick.length > 0 ? "current" : "empty")
     : "empty";
-  const tricksInPile = visibleMode === "last"
-    ? (gameState?.completedTricks.slice(0, -1) ?? [])
-    : (gameState?.completedTricks ?? []);
+  const myWonPlays = gameState?.completedTricks
+    .filter((trick) => trick.winnerId === socketId)
+    .flatMap((trick) => trick.plays) ?? [];
+  const otherCompletedTricksCount = gameState?.completedTricks
+    .filter((trick) => trick.winnerId !== socketId)
+    .length ?? 0;
 
   const currentPlayer = gameState?.players.find(p => p.id === gameState?.currentPlayerId);
 
@@ -227,7 +239,10 @@ export default function Game() {
     opponents,
     isMyTurn,
     visiblePlays,
-    completedTricksCount: tricksInPile.length,
+    visibleMode,
+    visibleWinnerId: undefined,
+    myWonPlays,
+    completedTricksCount: otherCompletedTricksCount,
     opponentHovers,
     onPlayCard: playCard,
     onHoverCard: handleHoverCard,
@@ -252,6 +267,102 @@ export default function Game() {
       {/* ── Overlay HTML ─────────────────────────────────────────────────────── */}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10 }}>
 
+        {/* ── Scores très visibles ───────────────────────────────────────────── */}
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            width: 220,
+            maxWidth: "calc(100vw - 24px)",
+            borderRadius: 18,
+            background: "rgba(255,255,255,0.94)",
+            border: "2px solid rgba(255,255,255,0.65)",
+            overflow: "hidden",
+            pointerEvents: "auto",
+          }}
+        >
+          <div
+            style={{
+              padding: "9px 12px",
+              background: "var(--green-primary)",
+              borderBottom: "2px solid var(--green-dark)",
+              color: "#fff",
+              fontSize: 12,
+              fontWeight: 900,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+            }}
+          >
+            Points
+          </div>
+          <div>
+            {gameState.players.map((p, index) => {
+              const isActive = p.id === gameState.currentPlayerId;
+              const isMe = p.id === socketId;
+              return (
+                <div
+                  key={p.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "9px 10px",
+                    background: isActive ? "rgba(245,158,11,0.16)" : isMe ? "rgba(24,163,84,0.1)" : "#fff",
+                    borderTop: index > 0 ? "1px solid rgba(17,24,39,0.08)" : "none",
+                  }}
+                >
+                  <AvatarDisplay emoji={p.emoji} size={38} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
+                      style={{
+                        color: "var(--text-dark)",
+                        fontSize: 13,
+                        fontWeight: 900,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {p.username}
+                    </div>
+                    <div style={{ color: "var(--text-muted)", fontSize: 10, fontWeight: 800 }}>
+                      {isActive ? "À jouer" : isMe ? "Toi" : `${p.cardsCount} cartes`}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      minWidth: 48,
+                      textAlign: "center",
+                      color: isActive ? "var(--gold-dark)" : "var(--green-dark)",
+                      fontSize: 30,
+                      fontWeight: 1000,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {p.score}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Actions haut droite ────────────────────────────────────────────── */}
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            pointerEvents: "auto",
+          }}
+        >
+          <RulesButton compact />
+        </div>
+
         {/* ── Header flottant glassmorphism ────────────────────────────────────── */}
         <div style={{
           position: "absolute", top: 12, left: "50%",
@@ -275,31 +386,6 @@ export default function Game() {
           <span style={{ color: "var(--gold)", fontWeight: 900, fontFamily: "Georgia, serif", letterSpacing: "0.12em", fontSize: 15, marginRight: 2 }}>♠</span>
           {/* Séparateur */}
           <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.15)", marginRight: 4 }} />
-
-          {/* Score chips */}
-          {gameState.players.map(p => {
-            const isActive = p.id === gameState.currentPlayerId;
-            const isMe = p.id === socketId;
-            return (
-              <div key={p.id}
-                style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  padding: "3px 8px 3px 4px",
-                  borderRadius: 100,
-                  background: isActive ? "var(--gold)" : "rgba(255,255,255,0.08)",
-                  border: isActive ? "1px solid var(--gold-dark)" : "1px solid rgba(255,255,255,0.1)",
-                  color: isActive ? "#111" : isMe ? "#bbf7d0" : "rgba(255,255,255,0.78)",
-                  fontSize: 11, fontWeight: 700,
-                  boxShadow: isActive ? "0 0 10px rgba(245,158,11,0.4)" : "none",
-                  transition: "all 0.2s",
-                }}>
-                <AvatarDisplay emoji={p.emoji} size={20} />
-                <span style={{ maxWidth: 55, overflow: "hidden", textOverflow: "ellipsis" }}>{p.username}</span>
-                <span style={{ fontWeight: 900 }}>{p.score}</span>
-                <span style={{ opacity: 0.5 }}>/{gameState.settings.targetScore}</span>
-              </div>
-            );
-          })}
 
           {/* Séparateur */}
           <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.15)", marginLeft: 2 }} />
