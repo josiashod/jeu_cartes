@@ -7,6 +7,8 @@ import { CardSuit, PublicSipaGameState } from "@/game";
 import type { GameSceneProps } from "@/components/GameScene";
 import { AvatarDisplay } from "@/components/AvatarDisplay";
 import RulesButton from "@/components/RulesButton";
+import SettingsButton from "@/components/SettingsButton";
+import { useSipaSound, useSoundSettings } from "@/lib/sound";
 
 // Chargé uniquement côté client (Three.js ne supporte pas SSR)
 const GameScene = dynamic(() => import("@/components/GameScene"), { ssr: false });
@@ -136,6 +138,13 @@ export default function Game() {
   const [showModal, setShowModal] = useState(false);
   const [opponentHovers, setOpponentHovers] = useState<Record<string, number | null>>({});
   const prevStatusRef = useRef<string | null>(null);
+  const prevAudioRef = useRef<{ ready: boolean; trickCount: number; status: string | null }>({
+    ready: false,
+    trickCount: 0,
+    status: null,
+  });
+  const { enabled: soundsEnabled, setEnabled: setSoundsEnabled } = useSoundSettings();
+  const playSound = useSipaSound(soundsEnabled);
 
   useEffect(() => {
     if (!channel || typeof channel !== "string") return;
@@ -171,6 +180,27 @@ export default function Game() {
     prevStatusRef.current = gameState.status;
   }, [gameState?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!gameState || !socketId) return;
+
+    const previous = prevAudioRef.current;
+    const currentTrickCount = gameState.completedTricks.length;
+    if (!previous.ready) {
+      prevAudioRef.current = { ready: true, trickCount: currentTrickCount, status: gameState.status };
+      return;
+    }
+
+    const didWinGame = previous.status !== "finished" && gameState.status === "finished" && gameState.winnerId === socketId;
+    const lastTrick = gameState.completedTricks.at(-1);
+    if (didWinGame) {
+      playSound("win-game");
+    } else if (currentTrickCount > previous.trickCount && lastTrick?.winnerId === socketId) {
+      playSound("win-trick");
+    }
+
+    prevAudioRef.current = { ready: true, trickCount: currentTrickCount, status: gameState.status };
+  }, [gameState, playSound, socketId]);
+
   const me = useMemo(() => gameState?.players.find(p => p.id === socketId), [gameState, socketId]);
   const isMyTurn = Boolean(me && gameState?.currentPlayerId === me.id && gameState?.status === "playing");
   const canAnnounceCombo789 = Boolean(me && gameState?.status === "playing" && gameState?.comboWindowOpen && gameState?.comboOptions.length > 0);
@@ -184,6 +214,7 @@ export default function Game() {
 
   const playCard = (cardId: string) => {
     if (typeof channel !== "string") return;
+    playSound("play-card");
     getSocket().emit("play_card", { roomCode: channel, cardId });
   };
   const nextRound = () => {
@@ -246,6 +277,7 @@ export default function Game() {
     opponentHovers,
     onPlayCard: playCard,
     onHoverCard: handleHoverCard,
+    onPlayableCardHover: () => playSound("hover"),
   };
 
   return (
@@ -361,6 +393,7 @@ export default function Game() {
           }}
         >
           <RulesButton compact />
+          <SettingsButton soundsEnabled={soundsEnabled} onSoundsEnabledChange={setSoundsEnabled} />
         </div>
 
         {/* ── Header flottant glassmorphism ────────────────────────────────────── */}

@@ -169,11 +169,12 @@ interface FaceCardProps {
   onClick?: () => void;
   onHoverStart?: () => void;
   onHoverEnd?: () => void;
+  onPlayableHover?: () => void;
 }
 
 function FaceCard({
   card, pos, fanAngle = 0, tilt = 0, zIndex = 0,
-  isPlayable, isHighlighted, onClick, onHoverStart, onHoverEnd,
+  isPlayable, isHighlighted, onClick, onHoverStart, onHoverEnd, onPlayableHover,
 }: FaceCardProps) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const matRef = useRef<THREE.MeshStandardMaterial>(null!);
@@ -200,6 +201,7 @@ function FaceCard({
         e.stopPropagation();
         hoveredRef.current = true;
         onHoverStart?.();
+        if (isPlayable) onPlayableHover?.();
         document.body.style.cursor = isPlayable ? 'pointer' : 'default';
       }}
       onPointerOut={() => { hoveredRef.current = false; onHoverEnd?.(); document.body.style.cursor = 'default'; }}
@@ -287,9 +289,10 @@ interface PlayerHandProps {
   isMyTurn: boolean;
   onPlayCard: (id: string) => void;
   onHoverCard?: (index: number | null) => void;
+  onPlayableCardHover?: () => void;
 }
 
-export function PlayerHand({ hand, isMyTurn, onPlayCard, onHoverCard }: PlayerHandProps) {
+export function PlayerHand({ hand, isMyTurn, onPlayCard, onHoverCard, onPlayableCardHover }: PlayerHandProps) {
   const layout = useMemo(() => playerHandLayout(hand.length), [hand.length]);
   if (hand.length === 0) return null;
   return (
@@ -305,6 +308,7 @@ export function PlayerHand({ hand, isMyTurn, onPlayCard, onHoverCard }: PlayerHa
             onClick={() => onPlayCard(card.id)}
             onHoverStart={() => onHoverCard?.(i)}
             onHoverEnd={() => onHoverCard?.(null)}
+            onPlayableHover={onPlayableCardHover}
           />
         );
       })}
@@ -472,10 +476,11 @@ export interface GameSceneProps {
   opponentHovers: Record<string, number | null>;
   onPlayCard: (cardId: string) => void;
   onHoverCard: (index: number | null) => void;
+  onPlayableCardHover?: () => void;
 }
 
 // ── Scène ─────────────────────────────────────────────────────────────────────
-function Scene({ me, opponents, isMyTurn, visiblePlays, visibleMode, visibleWinnerId, myWonPlays, completedTricksCount, opponentHovers, onPlayCard, onHoverCard }: GameSceneProps) {
+function Scene({ me, opponents, isMyTurn, visiblePlays, visibleMode, visibleWinnerId, myWonPlays, completedTricksCount, opponentHovers, onPlayCard, onHoverCard, onPlayableCardHover }: GameSceneProps) {
   const positions = useMemo(() => opponentPositions(opponents.length), [opponents.length]);
 
   return (
@@ -508,6 +513,7 @@ function Scene({ me, opponents, isMyTurn, visiblePlays, visibleMode, visibleWinn
           isMyTurn={isMyTurn}
           onPlayCard={onPlayCard}
           onHoverCard={onHoverCard}
+          onPlayableCardHover={onPlayableCardHover}
         />
       )}
     </>
