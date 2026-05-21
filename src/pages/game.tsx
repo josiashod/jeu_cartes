@@ -1,8 +1,14 @@
 import "@/app/globals.css";
 import { useRouter } from "next/router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { getSocket } from "@/lib/socket";
-import { Card, CardSuit, CompletedTrick, PlayedCard, PublicSipaGameState, PublicSipaPlayer } from "@/game";
+import { CardSuit, PublicSipaGameState } from "@/game";
+import type { GameSceneProps } from "@/components/GameScene";
+import { AvatarDisplay } from "@/components/AvatarDisplay";
+
+// Chargé uniquement côté client (Three.js ne supporte pas SSR)
+const GameScene = dynamic(() => import("@/components/GameScene"), { ssr: false });
 
 const suitSymbols: Record<CardSuit, string> = {
   [CardSuit.Spade]: "♠",
@@ -11,428 +17,402 @@ const suitSymbols: Record<CardSuit, string> = {
   [CardSuit.Club]: "♣",
 };
 
-const redSuits = new Set<CardSuit>([CardSuit.Heart, CardSuit.Diamond]);
-
-/**
- * Affiche une carte SIPA avec son style face visible.
- *
- * @param props.card Carte à présenter.
- * @param props.disabled Indique si la carte ne peut pas être sélectionnée.
- * @param props.compact Réduit la carte pour le plateau mobile et la table.
- * @param props.onClick Action déclenchée au clic.
- */
-function PlayingCard({
-  card,
-  disabled,
-  compact,
-  onClick,
+// ── Popup fin de manche / partie ──────────────────────────────────────────────
+function RoundEndModal({
+  gameState, socketId, onNextRound, onClose,
 }: {
-  card: Card;
-  disabled?: boolean;
-  compact?: boolean;
-  onClick?: () => void;
+  gameState: PublicSipaGameState;
+  socketId: string | undefined;
+  onNextRound: () => void;
+  onClose: () => void;
 }) {
-  const isRed = redSuits.has(card.suit);
+  const isFinished = gameState.status === "finished";
+  const winner = isFinished ? gameState.players.find(p => p.id === gameState.winnerId) : null;
+  const me = gameState.players.find(p => p.id === socketId);
+  const isCreator = Boolean(me?.isCreator);
+  const targetScore = gameState.settings.targetScore;
+  const sortedPlayers = [...gameState.players].sort((a, b) => b.score - a.score);
 
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={`${compact ? "h-24 w-16 p-2 sm:h-28 sm:w-20" : "h-32 w-24 p-3"} shrink-0 rounded-lg border-4 bg-white text-left shadow-[0_5px_0_#111827] transition ${
-        disabled ? "cursor-not-allowed opacity-50" : "hover:-translate-y-2 hover:shadow-[0_9px_0_#111827]"
-      } ${isRed ? "border-red-700 text-red-700" : "border-gray-900 text-gray-900"}`}
-    >
-      <div className={`${compact ? "text-lg sm:text-xl" : "text-2xl"} font-black leading-none`}>{card.value}</div>
-      <div className={`${compact ? "mt-3 text-4xl sm:mt-4" : "mt-5 text-5xl"} text-center`}>{suitSymbols[card.suit]}</div>
-    </button>
-  );
-}
-
-/**
- * Affiche le dos d'une carte cachee sans révéler sa valeur.
- *
- * @param props.compact Réduit le dos pour les zones compactes.
- */
-function HiddenCard({ compact }: { compact?: boolean }) {
   return (
     <div
-      className={`${compact ? "h-24 w-16 sm:h-28 sm:w-20" : "h-32 w-24"} flex shrink-0 items-center justify-center rounded-lg border-4 border-yellow-300 bg-emerald-950 shadow-[0_5px_0_#111827]`}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(15,23,42,0.72)", backdropFilter: "blur(6px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="flex h-[78%] w-[76%] items-center justify-center rounded-md border-2 border-yellow-200 bg-[radial-gradient(circle_at_center,#facc15_0_12%,transparent_13%),linear-gradient(135deg,#064e3b,#022c22)] text-2xl font-black text-yellow-200">
-        ?
+      <div className="w-full max-w-sm rounded-2xl overflow-hidden animate-scaleIn"
+        style={{ background: "var(--white-panel)", border: "2px solid var(--cream-border)", boxShadow: "0 32px 80px rgba(0,0,0,0.6)" }}>
+
+        <div className="px-6 py-5 text-center border-b-2" style={{ background: "var(--green-primary)", borderColor: "var(--green-dark)" }}>
+          <div className="text-3xl mb-1">{isFinished ? "🏆" : "🎴"}</div>
+          <h2 className="text-xl font-black text-white" style={{ fontFamily: "Georgia, serif" }}>
+            {isFinished ? "Partie terminée !" : "Fin de manche"}
+          </h2>
+          {isFinished && winner && (
+            <p className="text-sm font-bold mt-1 flex items-center justify-center gap-2" style={{ color: "rgba(255,255,255,0.8)" }}>
+              <AvatarDisplay emoji={winner.emoji} size={24} />
+              {winner.username} remporte la partie !
+            </p>
+          )}
+        </div>
+
+        {gameState.lastMessage && (
+          <div className="px-5 pt-4 pb-2">
+            <p className="text-center font-bold text-base px-3 py-2 rounded-lg"
+              style={{ background: "rgba(201,162,39,0.1)", border: "1px solid rgba(201,162,39,0.3)", color: "var(--gold-dark)" }}>
+              {gameState.lastMessage}
+            </p>
+          </div>
+        )}
+
+        <div className="px-5 py-3 space-y-2.5">
+          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Scores</p>
+          {sortedPlayers.map((player, rank) => {
+            const pct = Math.min(100, Math.round((player.score / targetScore) * 100));
+            const isLeader = rank === 0 && player.score > 0;
+            return (
+              <div key={player.id}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold text-sm flex items-center gap-1.5"
+                    style={{ color: player.id === socketId ? "var(--green-primary)" : "var(--text-dark)" }}>
+                    {isLeader && <span style={{ color: "var(--gold)" }}>★</span>}
+                    <AvatarDisplay emoji={player.emoji} size={22} />
+                    {player.username}
+                  </span>
+                  <span className="font-black text-sm" style={{ color: "var(--green-primary)" }}>
+                    {player.score} / {targetScore}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--cream-border)" }}>
+                  <div className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${pct}%`, background: isLeader ? "var(--gold)" : "var(--green-primary)" }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="px-5 pb-5 pt-2">
+          {isFinished ? (
+            <button onClick={onClose}
+              className="w-full py-3 rounded-xl font-bold text-white transition-all hover:opacity-90"
+              style={{ background: "var(--green-primary)", border: "2px solid var(--green-dark)", boxShadow: "0 4px 0 var(--green-dark)" }}>
+              Fermer
+            </button>
+          ) : isCreator ? (
+            <button onClick={onNextRound}
+              className="w-full py-3 rounded-xl font-black text-xl text-white transition-all hover:opacity-90"
+              style={{ background: "var(--green-primary)", border: "2px solid var(--green-dark)", boxShadow: "0 4px 0 var(--green-dark)" }}>
+              ▶ Manche suivante
+            </button>
+          ) : (
+            <p className="text-center text-sm font-bold py-2" style={{ color: "var(--text-muted)" }}>
+              ⏳ En attente de l'hôte…
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-/**
- * Affiche une carte jouée avec l'identité du joueur.
- *
- * @param props.play Carte jouée sur le plateau.
- * @param props.player Joueur propriétaire de la carte.
- * @param props.position Position visuelle autour du tapis.
- */
-function TablePlay({
-  play,
-  player,
-  position,
-}: {
-  play: PlayedCard;
-  player?: PublicSipaPlayer;
-  position: string;
-}) {
-  return (
-    <div className={`absolute ${position} flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2`}>
-      <div className="rounded-full border-2 border-white/40 bg-black/25 px-3 py-1 text-center text-xs font-black text-white shadow">
-        <span className="mr-1">{player?.emoji}</span>
-        <span>{player?.username ?? "Joueur"}</span>
-      </div>
-      {play.hidden ? <HiddenCard compact /> : <PlayingCard card={play.card} compact disabled />}
-    </div>
-  );
-}
-
-/**
- * Donne une position stable pour chaque carte autour du centre du tapis.
- *
- * @param index Index de la carte dans l'ordre des joueurs.
- * @param total Nombre de joueurs.
- * @returns Classes Tailwind de positionnement.
- */
-function getTablePosition(index: number, total: number): string {
-  const layouts: Record<number, string[]> = {
-    2: ["left-1/2 top-[28%]", "left-1/2 top-[72%]"],
-    3: ["left-1/2 top-[24%]", "left-[24%] top-[68%]", "left-[76%] top-[68%]"],
-    4: ["left-1/2 top-[22%]", "left-[22%] top-1/2", "left-1/2 top-[78%]", "left-[78%] top-1/2"],
-    5: ["left-1/2 top-[20%]", "left-[22%] top-[42%]", "left-[30%] top-[76%]", "left-[70%] top-[76%]", "left-[78%] top-[42%]"],
-  };
-
-  return (layouts[total] ?? layouts[5])[index] ?? "left-1/2 top-1/2";
-}
-
-/**
- * Résout les cartes à afficher sur la table.
- *
- * @param state Etat public de la partie.
- * @returns La levée en cours ou la dernière levée terminee.
- */
-function getVisibleTableTrick(state: PublicSipaGameState): {
-  plays: PlayedCard[];
-  trick?: CompletedTrick;
-  mode: "current" | "last" | "empty";
-} {
-  if (state.currentTrick.length > 0) {
-    return { plays: state.currentTrick, mode: "current" };
-  }
-
-  const lastTrick = state.completedTricks.at(-1);
-
-  if (lastTrick) {
-    return { plays: lastTrick.plays, trick: lastTrick, mode: "last" };
-  }
-
-  return { plays: [], mode: "empty" };
-}
-
+// ── Page de jeu ───────────────────────────────────────────────────────────────
 export default function Game() {
   const router = useRouter();
   const { channel } = router.query;
   const [gameState, setGameState] = useState<PublicSipaGameState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [socketId, setSocketId] = useState<string | undefined>();
+  const [showModal, setShowModal] = useState(false);
+  const [opponentHovers, setOpponentHovers] = useState<Record<string, number | null>>({});
+  const prevStatusRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!channel || typeof channel !== "string") {
-      return;
-    }
-
+    if (!channel || typeof channel !== "string") return;
     const socket = getSocket();
     socket.emit("get_game_state", channel);
     setSocketId(socket.id);
 
-    const handleConnect = () => {
-      setSocketId(socket.id);
-      socket.emit("get_game_state", channel);
-    };
-
-    const handleGameState = (state: PublicSipaGameState) => {
-      setGameState(state);
-      setError(null);
-    };
-
-    const handleGameError = (message: string) => {
-      setError(message);
-    };
-
+    const handleConnect = () => { setSocketId(socket.id); socket.emit("get_game_state", channel); };
     socket.on("connect", handleConnect);
-    socket.on("game_state", handleGameState);
-    socket.on("game_error", handleGameError);
+    socket.on("game_state", (state: PublicSipaGameState) => { setGameState(state); setError(null); });
+    socket.on("game_error", (msg: string) => setError(msg));
+    socket.on("opponent_card_hover", ({ playerId, cardIndex }: { playerId: string; cardIndex: number | null }) => {
+      setOpponentHovers(prev => ({ ...prev, [playerId]: cardIndex }));
+    });
+    socket.on("room_closed", () => router.push("/"));
 
     return () => {
       socket.off("connect", handleConnect);
-      socket.off("game_state", handleGameState);
-      socket.off("game_error", handleGameError);
+      socket.off("game_state");
+      socket.off("game_error");
+      socket.off("opponent_card_hover");
+      socket.off("room_closed");
     };
   }, [channel]);
 
-  const me = useMemo(
-    () => gameState?.players.find((player) => player.id === socketId),
-    [gameState, socketId],
-  );
-  const currentPlayer = gameState?.players.find((player) => player.id === gameState.currentPlayerId);
-  const isMyTurn = Boolean(me && gameState?.currentPlayerId === me.id && gameState.status === "playing");
-  const sortedPlayers = gameState?.players ?? [];
-  const canAnnounceCombo789 = Boolean(
-    me && gameState?.status === "playing" && gameState.comboWindowOpen && gameState.comboOptions.length > 0,
-  );
+  useEffect(() => {
+    if (!gameState) return;
+    if (
+      (gameState.status === "round-ended" || gameState.status === "finished") &&
+      prevStatusRef.current === "playing"
+    ) setShowModal(true);
+    if (gameState.status === "playing") setShowModal(false);
+    prevStatusRef.current = gameState.status;
+  }, [gameState?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const playSelectedCard = (cardId: string) => {
-    if (!channel || typeof channel !== "string") {
-      return;
-    }
+  const me = useMemo(() => gameState?.players.find(p => p.id === socketId), [gameState, socketId]);
+  const isMyTurn = Boolean(me && gameState?.currentPlayerId === me.id && gameState?.status === "playing");
+  const canAnnounceCombo789 = Boolean(me && gameState?.status === "playing" && gameState?.comboWindowOpen && gameState?.comboOptions.length > 0);
 
-    const socket = getSocket();
-    socket.emit("play_card", { roomCode: channel, cardId });
+  const opponents = useMemo(() => {
+    if (!gameState) return [];
+    const meIdx = gameState.players.findIndex(p => p.id === socketId);
+    if (meIdx < 0) return gameState.players;
+    return [...gameState.players.slice(meIdx + 1), ...gameState.players.slice(0, meIdx)];
+  }, [gameState, socketId]);
+
+  const playCard = (cardId: string) => {
+    if (typeof channel !== "string") return;
+    getSocket().emit("play_card", { roomCode: channel, cardId });
   };
-
   const nextRound = () => {
-    if (!channel || typeof channel !== "string") {
-      return;
-    }
-
-    const socket = getSocket();
-    socket.emit("next_round", { roomCode: channel });
+    if (typeof channel !== "string") return;
+    getSocket().emit("next_round", { roomCode: channel });
   };
-
   const declareCombo789 = (suit: CardSuit) => {
-    if (!channel || typeof channel !== "string") {
-      return;
-    }
-
-    const socket = getSocket();
-    socket.emit("declare_combo_789", { roomCode: channel, suit });
+    if (typeof channel !== "string") return;
+    getSocket().emit("declare_combo_789", { roomCode: channel, suit });
+  };
+  const handleHoverCard = (index: number | null) => {
+    if (typeof channel !== "string") return;
+    if (index !== null) getSocket().emit("card_hover_start", { roomCode: channel, cardIndex: index });
+    else getSocket().emit("card_hover_end", { roomCode: channel });
+  };
+  const endGame = () => {
+    if (!confirm("Terminer la partie et retourner à l'accueil ?")) return;
+    if (typeof channel === "string") getSocket().emit("close_room", { roomCode: channel });
+    router.push("/");
   };
 
+  // Cartes visibles sur la table
+  const visiblePlays = gameState
+    ? (gameState.currentTrick.length > 0
+        ? gameState.currentTrick
+        : (gameState.completedTricks.at(-1)?.plays ?? []))
+    : [];
+  const visibleMode = gameState
+    ? (gameState.currentTrick.length > 0 ? "current" : gameState.completedTricks.length > 0 ? "last" : "empty")
+    : "empty";
+  const tricksInPile = visibleMode === "last"
+    ? (gameState?.completedTricks.slice(0, -1) ?? [])
+    : (gameState?.completedTricks ?? []);
+
+  const currentPlayer = gameState?.players.find(p => p.id === gameState?.currentPlayerId);
+
+  // ── Écran de chargement ─────────────────────────────────────────────────────
   if (!gameState) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-emerald-800 px-4 text-white">
+      <div className="flex min-h-screen items-center justify-center felt-table">
         <div className="text-center">
-          <h1 className="mb-2 text-4xl font-black">SIPA</h1>
-          <p className="text-lg">Chargement de la partie...</p>
-          {error && <p className="mt-4 rounded bg-red-100 px-4 py-2 font-bold text-red-800">{error}</p>}
+          <div className="text-6xl font-black mb-3" style={{ color: "var(--gold)", fontFamily: "Georgia, serif", letterSpacing: "0.3em" }}>SIPA</div>
+          <p className="text-sm" style={{ color: "rgba(255,255,255,0.5)", letterSpacing: "0.15em" }}>CHARGEMENT…</p>
+          {error && <div className="mt-4 px-5 py-3 rounded-lg text-sm font-bold" style={{ background: "rgba(220,38,38,0.2)", color: "#fca5a5" }}>{error}</div>}
         </div>
       </div>
     );
   }
 
-  const visibleTable = getVisibleTableTrick(gameState);
-  const visibleTrickWinner = visibleTable.trick
-    ? gameState.players.find((player) => player.id === visibleTable.trick?.winnerId)
-    : undefined;
-  const nextTrickIndex = Math.min(gameState.completedTricks.length + 1, 5);
+  const sceneProps: GameSceneProps = {
+    me,
+    opponents,
+    isMyTurn,
+    visiblePlays,
+    completedTricksCount: tricksInPile.length,
+    opponentHovers,
+    onPlayCard: playCard,
+    onHoverCard: handleHoverCard,
+  };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#15803d,#064e3b_44%,#022c22)] text-white">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b-4 border-emerald-950 bg-emerald-950/90 px-4 py-3 shadow-lg sm:px-6">
-        <div>
-          <h1 className="text-3xl font-black">SIPA</h1>
-          <p className="font-mono text-sm text-emerald-100">Room {channel}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-sm uppercase tracking-wide text-emerald-100">Tour actuel</p>
-          <p className="text-xl font-black">{currentPlayer ? `${currentPlayer.emoji} ${currentPlayer.username}` : "-"}</p>
-        </div>
-      </header>
+    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden", background: "#0d3d1f" }}>
 
-      <main className="mx-auto grid max-w-7xl gap-4 px-3 py-4 sm:px-4 lg:grid-cols-[18rem_1fr] lg:gap-6 lg:py-6">
-        <aside className="overflow-hidden rounded-lg border-4 border-emerald-950 bg-white text-gray-900 shadow-[0_6px_0_#052e16]">
-          <div className="border-b-4 border-emerald-950 bg-yellow-300 px-4 py-3">
-            <h2 className="text-center text-lg font-black text-yellow-950 sm:text-xl">Scores</h2>
-          </div>
-          <div className="grid grid-cols-2 divide-x-2 divide-y-2 divide-gray-200 sm:grid-cols-3 lg:block lg:divide-x-0">
-            {sortedPlayers.map((player) => (
-              <div
-                key={player.id}
-                className={`flex items-center gap-3 p-3 lg:p-4 ${
-                  player.id === gameState.currentPlayerId ? "bg-emerald-50" : ""
-                }`}
-              >
-                <div className="text-3xl lg:text-4xl">{player.emoji}</div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-black">{player.username}</p>
-                  <p className="text-sm font-bold text-gray-500">{player.cardsCount} cartes</p>
-                </div>
-                <div className="rounded bg-emerald-100 px-3 py-1 font-black text-emerald-900">
-                  {player.score}
-                </div>
+      {/* ── Canvas Three.js ──────────────────────────────────────────────────── */}
+      <GameScene {...sceneProps} />
+
+      {/* ── Popup fin de manche ──────────────────────────────────────────────── */}
+      {showModal && (
+        <RoundEndModal
+          gameState={gameState}
+          socketId={socketId}
+          onNextRound={() => { nextRound(); setShowModal(false); }}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {/* ── Overlay HTML ─────────────────────────────────────────────────────── */}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10 }}>
+
+        {/* ── Header flottant glassmorphism ────────────────────────────────────── */}
+        <div style={{
+          position: "absolute", top: 12, left: "50%",
+          transform: "translateX(-50%)",
+          display: "flex", alignItems: "center", gap: 8,
+          background: "rgba(8,14,28,0.55)",
+          backdropFilter: "blur(22px)",
+          WebkitBackdropFilter: "blur(22px)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 100,
+          padding: "5px 14px 5px 10px",
+          boxShadow: "0 4px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)",
+          pointerEvents: "auto",
+          whiteSpace: "nowrap",
+          maxWidth: "calc(100vw - 24px)",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          rowGap: 4,
+        }}>
+          {/* Logo */}
+          <span style={{ color: "var(--gold)", fontWeight: 900, fontFamily: "Georgia, serif", letterSpacing: "0.12em", fontSize: 15, marginRight: 2 }}>♠</span>
+          {/* Séparateur */}
+          <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.15)", marginRight: 4 }} />
+
+          {/* Score chips */}
+          {gameState.players.map(p => {
+            const isActive = p.id === gameState.currentPlayerId;
+            const isMe = p.id === socketId;
+            return (
+              <div key={p.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  padding: "3px 8px 3px 4px",
+                  borderRadius: 100,
+                  background: isActive ? "var(--gold)" : "rgba(255,255,255,0.08)",
+                  border: isActive ? "1px solid var(--gold-dark)" : "1px solid rgba(255,255,255,0.1)",
+                  color: isActive ? "#111" : isMe ? "#bbf7d0" : "rgba(255,255,255,0.78)",
+                  fontSize: 11, fontWeight: 700,
+                  boxShadow: isActive ? "0 0 10px rgba(245,158,11,0.4)" : "none",
+                  transition: "all 0.2s",
+                }}>
+                <AvatarDisplay emoji={p.emoji} size={20} />
+                <span style={{ maxWidth: 55, overflow: "hidden", textOverflow: "ellipsis" }}>{p.username}</span>
+                <span style={{ fontWeight: 900 }}>{p.score}</span>
+                <span style={{ opacity: 0.5 }}>/{gameState.settings.targetScore}</span>
               </div>
+            );
+          })}
+
+          {/* Séparateur */}
+          <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.15)", marginLeft: 2 }} />
+
+          {/* Tour + pli */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {currentPlayer && (
+              <span style={{
+                fontSize: 11, fontWeight: 800,
+                color: isMyTurn ? "#4ade80" : "rgba(255,255,255,0.6)",
+                textShadow: isMyTurn ? "0 0 10px rgba(74,222,128,0.6)" : "none",
+              }}>
+                {isMyTurn ? "▶ À vous" : currentPlayer.username}
+              </span>
+            )}
+            <span style={{
+              fontSize: 10, fontWeight: 700,
+              color: "var(--gold)", opacity: 0.75,
+            }}>
+              {gameState.completedTricks.length + (gameState.currentTrick.length > 0 ? 1 : 0)}/5
+            </span>
+          </div>
+
+          {/* Bouton fin de partie (créateur uniquement) */}
+          {me?.isCreator && (
+            <>
+              <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.15)" }} />
+              <button type="button" onClick={endGame}
+                style={{
+                  background: "rgba(220,38,38,0.18)", border: "1px solid rgba(220,38,38,0.4)",
+                  color: "#fca5a5", borderRadius: 100, padding: "3px 10px",
+                  fontSize: 10, fontWeight: 800, cursor: "pointer",
+                }}>
+                ⏹ Fin
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Erreur */}
+        {error && (
+          <div style={{
+            position: "absolute", top: 64, left: "50%", transform: "translateX(-50%)",
+            padding: "8px 16px", borderRadius: 12, fontSize: 13, fontWeight: 700,
+            background: "rgba(220,38,38,0.22)", border: "1px solid rgba(220,38,38,0.4)", color: "#fca5a5",
+            pointerEvents: "auto",
+          }}>
+            {error}
+          </div>
+        )}
+
+        {/* ── Bouton combo 7-8-9 (flottant, centré) ────────────────────────────── */}
+        {canAnnounceCombo789 && (
+          <div style={{
+            position: "absolute", bottom: "28%", left: "50%",
+            transform: "translateX(-50%)",
+            display: "flex", gap: 8, pointerEvents: "auto",
+          }}>
+            {gameState.comboOptions.map(option => (
+              <button key={option.suit} type="button" onClick={() => declareCombo789(option.suit)}
+                className="animate-popIn"
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: 100,
+                  fontWeight: 900, fontSize: 13, color: "#fff",
+                  background: "rgba(37,99,235,0.85)",
+                  border: "2px solid rgba(147,197,253,0.5)",
+                  backdropFilter: "blur(12px)",
+                  boxShadow: "0 0 20px rgba(59,130,246,0.55), 0 4px 12px rgba(0,0,0,0.4)",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}>
+                ✦ 7-8-9 {suitSymbols[option.suit]}
+              </button>
             ))}
           </div>
-          <div className="border-t-4 border-emerald-950 p-4 text-center text-sm font-bold text-gray-600">
-            Objectif: {gameState.settings.targetScore} points
-          </div>
-        </aside>
+        )}
 
-        <section className="space-y-4 lg:space-y-6">
-          {error && (
-            <div className="rounded-lg border-4 border-red-900 bg-red-100 p-4 font-bold text-red-900">
-              {error}
-            </div>
-          )}
-
-          <div className="overflow-hidden rounded-[2rem] border-4 border-emerald-950 bg-emerald-800 shadow-[0_8px_0_#052e16]">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b-4 border-emerald-950 bg-emerald-950/80 px-4 py-3">
-              <div>
-                <h2 className="text-2xl font-black">Table</h2>
-                <p className="text-sm font-bold text-emerald-100">
-                  Tour {visibleTable.mode === "last" ? visibleTable.trick?.index : nextTrickIndex}/5
-                </p>
-              </div>
-              <div className="flex flex-wrap justify-end gap-2">
-                {gameState.comboWindowOpen && gameState.status === "playing" && (
-                  <div className="rounded-full border-2 border-blue-200 bg-blue-100 px-4 py-2 text-sm font-black text-blue-950">
-                    Annonce 7-8-9 ouverte
-                  </div>
-                )}
-                <div className="rounded-full border-2 border-yellow-300 bg-yellow-200 px-4 py-2 text-sm font-black text-yellow-950">
-                  {visibleTable.mode === "current"
-                    ? "Cartes en cours"
-                    : visibleTrickWinner
-                      ? `Dernier tour remporte par ${visibleTrickWinner.username}`
-                      : "En attente de la premiere carte"}
-                </div>
-              </div>
-            </div>
-
-            <div className="relative min-h-[24rem] overflow-hidden bg-[radial-gradient(circle_at_center,#16a34a_0,#047857_42%,#065f46_100%)] p-4 sm:min-h-[30rem]">
-              <div className="absolute inset-6 rounded-full border-4 border-dashed border-white/20" />
-              <div className="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-yellow-300/70 bg-black/20 text-center text-sm font-black uppercase tracking-wide text-yellow-100 shadow-inner sm:h-36 sm:w-36">
-                SIPA
-              </div>
-
-              {visibleTable.mode === "empty" ? (
-                <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-                  <p className="rounded-full bg-black/20 px-5 py-3 text-lg font-black text-emerald-50">
-                    En attente de la premiere carte.
-                  </p>
-                </div>
-              ) : (
-                visibleTable.plays.map((play, index) => {
-                  const player = gameState.players.find((candidate) => candidate.id === play.playerId);
-
-                  return (
-                    <TablePlay
-                      key={`${visibleTable.mode}-${play.playerId}-${play.card.id}`}
-                      play={play}
-                      player={player}
-                      position={getTablePosition(index, gameState.players.length)}
-                    />
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          {gameState.completedTricks.length > 0 && (
-            <div className="rounded-lg border-4 border-emerald-950 bg-white p-4 text-gray-900 shadow-[0_6px_0_#052e16]">
-              <h2 className="mb-3 text-lg font-black">Historique des tours</h2>
-              <div className="flex gap-3 overflow-x-auto pb-2">
-                {gameState.completedTricks.map((trick) => {
-                  const winner = gameState.players.find((player) => player.id === trick.winnerId);
-
-                  return (
-                    <div
-                      key={trick.index}
-                      className="min-w-44 rounded-lg border-2 border-gray-300 bg-gray-50 p-3"
-                    >
-                      <p className="text-sm font-black text-gray-500">Tour {trick.index}</p>
-                      <p className="truncate font-black">{winner?.emoji} {winner?.username}</p>
-                      <p className="mt-1 text-sm font-bold text-gray-600">
-                        Carte gagnante: {trick.winningCard.value}{suitSymbols[trick.winningCard.suit]}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-lg border-4 border-emerald-950 bg-white p-4 text-gray-900 shadow-[0_6px_0_#052e16] sm:p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-black">Votre main</h2>
-                <p className="font-bold text-gray-500">
-                  {canAnnounceCombo789
-                    ? "Vous pouvez annoncer 7-8-9 avant la premiere carte."
-                    : isMyTurn
-                      ? "A vous de jouer."
-                      : "Patientez pendant le tour des autres joueurs."}
-                </p>
-              </div>
-              {gameState.status === "round-ended" && me?.isCreator && (
-                <button
-                  type="button"
-                  onClick={nextRound}
-                  className="rounded-lg border-4 border-blue-800 bg-blue-500 px-5 py-3 font-black text-white shadow-[0_4px_0_#1e3a8a] hover:-translate-y-1"
-                >
-                  Manche suivante
+        {/* ── Zone basse : message + scores ────────────────────────────────────── */}
+        <div style={{
+          position: "absolute", bottom: 12, left: "50%",
+          transform: "translateX(-50%)",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+          pointerEvents: "none",
+          width: "min(480px, calc(100vw - 24px))",
+        }}>
+          {/* Message fin de pli */}
+          {(gameState.lastMessage || gameState.status === "round-ended" || gameState.status === "finished") && !showModal && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "8px 16px",
+              borderRadius: 100,
+              background: "rgba(8,14,28,0.62)",
+              backdropFilter: "blur(14px)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              fontSize: 12, color: "rgba(255,255,255,0.65)",
+              pointerEvents: "auto",
+            }}>
+              {gameState.lastMessage && <span>{gameState.lastMessage}</span>}
+              {(gameState.status === "round-ended" || gameState.status === "finished") && (
+                <button type="button" onClick={() => setShowModal(true)}
+                  style={{
+                    padding: "4px 12px", borderRadius: 100,
+                    background: "var(--gold-dark)", border: "1px solid var(--gold)",
+                    color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                  }}>
+                  📊 Scores
                 </button>
               )}
             </div>
-
-            {canAnnounceCombo789 && (
-              <div className="mb-4 rounded-lg border-4 border-blue-700 bg-blue-50 p-4">
-                <p className="mb-3 font-black text-blue-950">
-                  Annonce disponible: 7, 8 et 9 de la même famille.
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  {gameState.comboOptions.map((option) => (
-                    <button
-                      key={option.suit}
-                      type="button"
-                      onClick={() => declareCombo789(option.suit)}
-                      className="rounded-lg border-4 border-blue-800 bg-blue-500 px-4 py-3 font-black text-white shadow-[0_4px_0_#1e3a8a] transition hover:-translate-y-1"
-                    >
-                      Annoncer 7-8-9 {suitSymbols[option.suit]} (+2 pts)
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {gameState.status === "finished" && (
-              <div className="mb-4 rounded-lg border-4 border-yellow-700 bg-yellow-100 p-4 font-black text-yellow-950">
-                Partie terminee. {gameState.players.find((player) => player.id === gameState.winnerId)?.username} gagne.
-              </div>
-            )}
-
-            <div className="min-h-36 overflow-x-auto pb-3">
-              <div className="flex min-w-max gap-3 sm:gap-4">
-                {me?.hand?.map((card, index) => (
-                  <div
-                    key={card.id}
-                    className="origin-bottom transition-transform sm:[&:nth-child(odd)]:rotate-[-2deg] sm:[&:nth-child(even)]:rotate-[2deg]"
-                    style={{ marginLeft: index === 0 ? 0 : -10 }}
-                  >
-                    <PlayingCard
-                      card={card}
-                      disabled={!isMyTurn}
-                      onClick={() => playSelectedCard(card.id)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {gameState.lastMessage && (
-              <p className="mt-4 rounded bg-gray-100 px-4 py-3 font-bold text-gray-700">
-                {gameState.lastMessage}
-              </p>
-            )}
-          </div>
-        </section>
-      </main>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

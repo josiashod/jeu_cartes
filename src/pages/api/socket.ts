@@ -357,6 +357,26 @@ const ioHandler = (req: NextApiRequest, res: SocketResponse) => {
         });
       });
 
+      socket.on('card_hover_start', ({ roomCode, cardIndex }) => {
+        if (typeof roomCode !== 'string' || typeof cardIndex !== 'number') return;
+        socket.to(roomCode).emit('opponent_card_hover', { playerId: socket.id, cardIndex });
+      });
+
+      socket.on('card_hover_end', ({ roomCode }) => {
+        if (typeof roomCode !== 'string') return;
+        socket.to(roomCode).emit('opponent_card_hover', { playerId: socket.id, cardIndex: null });
+      });
+
+      socket.on('close_room', ({ roomCode }) => {
+        if (typeof roomCode !== 'string') return;
+        const game = games[roomCode];
+        if (!game) return;
+        if (socket.id !== game.settings.creatorId) return;
+        socket.to(roomCode).emit('room_closed');
+        delete games[roomCode];
+        console.log(`Room ${roomCode} closed by creator`);
+      });
+
       socket.on('disconnect', () => {
         console.log('A user disconnected:', socket.id);
         cleanupUser();
@@ -379,6 +399,8 @@ interface ServerToClientEvents {
   game_error: (message: string) => void;
   receive_message: (message: { sender: string; text: string; timestamp: string }) => void;
   update_users: (users: string[]) => void; // Legacy
+  opponent_card_hover: (data: { playerId: string; cardIndex: number | null }) => void;
+  room_closed: () => void;
 }
 
 interface ClientToServerEvents {
@@ -393,6 +415,9 @@ interface ClientToServerEvents {
   create_channel: (channel: string) => void; // Legacy
   get_users: (channel: string) => void; // Legacy
   send_message: (data: { channel: string; message: string }) => void;
+  card_hover_start: (data: { roomCode: string; cardIndex: number }) => void;
+  card_hover_end: (data: { roomCode: string }) => void;
+  close_room: (data: { roomCode: string }) => void;
 }
 
 export default ioHandler;

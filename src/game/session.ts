@@ -219,6 +219,7 @@ export function declareCombo789Win(
   const points = 2;
   player.score += points;
   state.comboWindowOpen = false;
+  state.currentPlayerId = playerId; // Le gagnant du combo commence la prochaine manche
   state.status = player.score >= state.settings.targetScore ? "finished" : "round-ended";
   state.winnerId = state.status === "finished" ? player.id : undefined;
   state.lastMessage = `${player.username} annonce 7-8-9 ${formatSuitName(suit)} et marque ${points} points.`;
@@ -245,7 +246,7 @@ export function startNextRound(state: SipaGameState): SipaGameState {
       hand: hands[player.id],
       score: previousScores.get(player.id) ?? 0,
     })),
-    currentPlayerId: state.dealerId,
+    currentPlayerId: state.currentPlayerId, // Le gagnant de la manche précédente commence
     currentTrick: [],
     completedTricks: [],
     comboWindowOpen: true,
