@@ -39,7 +39,7 @@ function RoundEndModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.78)" }}
+      style={{ background: "rgba(0, 0, 0, 0.38)", backdropFilter: "blur(4px)" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="w-full max-w-sm animate-scaleIn" style={{
@@ -282,13 +282,29 @@ export default function Game() {
   // Cartes visibles sur la table (avec délai de 2s après complétion du pli)
   const visiblePlays = displayedTrick;
   const visibleMode = displayedMode;
-  const myWonPlays = gameState?.completedTricks
-    .filter((trick) => trick.winnerId === socketId)
-    .flatMap((trick) => trick.plays) ?? [];
-  const otherCompletedTricksCount = gameState?.completedTricks
-    .filter((trick) => trick.winnerId !== socketId)
-    .length ?? 0;
 
+  // Les plis déjà atterris dans les piles (en excluant celui qui est en train de voler)
+  const tricksInPiles = useMemo(() => {
+    if (!gameState) return [];
+    if (displayedMode === 'last') {
+      return gameState.completedTricks.slice(0, -1);
+    }
+    return gameState.completedTricks;
+  }, [gameState, displayedMode]);
+
+  const myWonPlays = useMemo(() => {
+    return tricksInPiles
+      .filter((trick) => trick.winnerId === socketId)
+      .flatMap((trick) => trick.plays);
+  }, [tricksInPiles, socketId]);
+
+  const otherCompletedTricksCount = useMemo(() => {
+    return tricksInPiles
+      .filter((trick) => trick.winnerId !== socketId)
+      .length;
+  }, [tricksInPiles, socketId]);
+
+  const isRoundEnded = gameState?.status === "round-ended" || gameState?.status === "finished";
   const currentPlayer = gameState?.players.find(p => p.id === gameState?.currentPlayerId);
 
   // ── Écran de chargement ─────────────────────────────────────────────────────
@@ -314,6 +330,7 @@ export default function Game() {
     myWonPlays,
     completedTricksCount: otherCompletedTricksCount,
     opponentHovers,
+    isRoundEnded,
     onPlayCard: playCard,
     onHoverCard: handleHoverCard,
     onPlayableCardHover: () => playSound("hover"),

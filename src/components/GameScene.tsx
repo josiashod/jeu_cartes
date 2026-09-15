@@ -5,6 +5,7 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { Card, CardSuit, PlayedCard, PublicSipaPlayer } from '@/game';
 import { AvatarDisplay } from './AvatarDisplay';
+import { Model as F } from './Table';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const CW = 0.72;
@@ -70,7 +71,7 @@ function getBackTex(): THREE.CanvasTexture {
   const cv = document.createElement('canvas');
   cv.width = W * S; cv.height = H * S;
   const c = cv.getContext('2d')!;
-  c.scale(S, S);;
+  c.scale(S, S);
 
   // Fond sombre
   c.fillStyle = '#12122a';
@@ -124,16 +125,45 @@ function getBackTex(): THREE.CanvasTexture {
   return backTex;
 }
 
-// ── Caméra adaptative ─────────────────────────────────────────────────────────
-function AdaptiveCamera() {
+// ── Caméra Cinématique Adaptative ─────────────────────────────────────────────
+interface CinematicCameraProps {
+  isRoundEnded?: boolean;
+}
+
+function CinematicCamera({ isRoundEnded = false }: CinematicCameraProps) {
   const { camera, size } = useThree();
-  useEffect(() => {
-    const fov = size.width < 640 ? 72 : 60;
-    (camera as THREE.PerspectiveCamera).fov = fov;
-    camera.position.set(0, 5.5, 6);
-    camera.lookAt(0, 0, -0.5);
-    (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
-  }, [camera, size.width]);
+  const currentLookAtRef = useRef(new THREE.Vector3(0, 0, -0.5));
+  const isMobile = size.width < 640;
+
+  const targetPos = useMemo(() => {
+    if (isRoundEnded) {
+      // Vue aérienne du haut (Top-down plongeante sur la table)
+      return new THREE.Vector3(0, 8.6, 0.4);
+    }
+    // Vue normale immersive face au joueur
+    return new THREE.Vector3(0, isMobile ? 6.2 : 5.5, isMobile ? 6.6 : 6.0);
+  }, [isRoundEnded, isMobile]);
+
+  const targetLookAt = useMemo(() => {
+    if (isRoundEnded) {
+      return new THREE.Vector3(0, 0, 0);
+    }
+    return new THREE.Vector3(0, 0, -0.5);
+  }, [isRoundEnded]);
+
+  useFrame((_, delta) => {
+    const perspCamera = camera as THREE.PerspectiveCamera;
+    const targetFov = isRoundEnded ? 56 : (isMobile ? 72 : 60);
+    perspCamera.fov += (targetFov - perspCamera.fov) * Math.min(1, delta * 3.5);
+    perspCamera.updateProjectionMatrix();
+
+    const alpha = Math.min(1, delta * 3.2);
+    camera.position.lerp(targetPos, alpha);
+
+    currentLookAtRef.current.lerp(targetLookAt, alpha);
+    camera.lookAt(currentLookAtRef.current);
+  });
+
   return null;
 }
 
@@ -156,7 +186,6 @@ function FeltTable() {
     </group>
   );
 }
-
 
 // ── Carte face visible ────────────────────────────────────────────────────────
 interface FaceCardProps {
@@ -249,15 +278,6 @@ function BackCard({ pos, fanAngle = 0, tilt = 0, zIndex = 0, isHighlighted }: Ba
 }
 
 // ── Layout éventail ───────────────────────────────────────────────────────────
-function fanLayout(n: number, zBase: number) {
-  const maxAngle = Math.min(22, n * 3.5) * (Math.PI / 180);
-  const spread = Math.min(2.0, n * 0.40);
-  return Array.from({ length: n }, (_, i) => {
-    const t = n <= 1 ? 0 : (i - (n - 1) / 2) / ((n - 1) / 2);
-    return { x: t * spread, z: zBase + t * t * 0.06, angle: t * maxAngle, t };
-  });
-}
-
 function playerHandLayout(n: number) {
   const spread = Math.min(1.95, Math.max(0.48, n * 0.34));
 
@@ -380,7 +400,6 @@ export function OpponentHand({ count, basePos, hoveredIndex, mirrorAngle, player
 }
 
 // ── Carte animée (pli) ───────────────────────────────────────────────────────
-// Enveloppe un groupe dont la position lerp vers la cible sur les 3 axes.
 interface AnimatedTrickCardProps {
   play: PlayedCard;
   pos: [number, number, number];
@@ -528,18 +547,33 @@ export interface GameSceneProps {
   myWonPlays: PlayedCard[];
   completedTricksCount: number;
   opponentHovers: Record<string, number | null>;
+  isRoundEnded?: boolean;
   onPlayCard: (cardId: string) => void;
   onHoverCard: (index: number | null) => void;
   onPlayableCardHover?: () => void;
 }
 
 // ── Scène ─────────────────────────────────────────────────────────────────────
-function Scene({ me, opponents, isMyTurn, visiblePlays, visibleMode, visibleWinnerId, myWonPlays, completedTricksCount, opponentHovers, onPlayCard, onHoverCard, onPlayableCardHover }: GameSceneProps) {
+function Scene({
+  me,
+  opponents,
+  isMyTurn,
+  visiblePlays,
+  visibleMode,
+  visibleWinnerId,
+  myWonPlays,
+  completedTricksCount,
+  opponentHovers,
+  isRoundEnded = false,
+  onPlayCard,
+  onHoverCard,
+  onPlayableCardHover,
+}: GameSceneProps) {
   const positions = useMemo(() => opponentPositions(opponents.length), [opponents.length]);
 
   return (
     <>
-      <AdaptiveCamera />
+      <CinematicCamera isRoundEnded={isRoundEnded} />
       <ambientLight intensity={0.68} />
       <directionalLight position={[0, 10, 4]} intensity={0.52} color="#fff6e0" castShadow />
       <pointLight position={[-4, 6, 3]} intensity={0.2} color="#a8e0ff" />
