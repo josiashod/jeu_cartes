@@ -5,7 +5,6 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { Card, CardSuit, PlayedCard, PublicSipaPlayer } from '@/game';
 import { AvatarDisplay } from './AvatarDisplay';
-import { Model as F } from './Table';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const CW = 0.72;

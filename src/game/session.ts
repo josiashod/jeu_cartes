@@ -323,9 +323,9 @@ function scoreRound(state: SipaGameState, lastWinnerPlay: PlayedCard): void {
     points = 4;
     const fropPlayer = state.players.find((p) => p.id === state.fropPlayerId);
     if (lastWinnerPlay.playerId === state.fropPlayerId) {
-      message = `${player.username} réussit son FROP et marque ${points} points ! 🃏`;
+      message = `${player.username} réussit son GONE et marque ${points} points ! 🃏`;
     } else {
-      message = `${fropPlayer?.username ?? "Frop"} échoue son FROP ! ${player.username} marque ${points} points.`;
+      message = `${fropPlayer?.username ?? "Frop"} échoue son GONE ! ${player.username} marque ${points} points.`;
     }
   } else {
     const previousTrick = state.completedTricks.at(-2);

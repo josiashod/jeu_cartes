@@ -394,7 +394,7 @@ export default function Game() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 900, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {p.username}
-                    {isFrop && <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 900, color: "#f59e0b", background: "#92400e", padding: "1px 4px", borderRadius: 3 }}>FROP</span>}
+                    {isFrop && <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 900, color: "#f59e0b", background: "#92400e", padding: "1px 4px", borderRadius: 3 }}>GONE</span>}
                   </div>
                   <div style={{ fontSize: 9, fontWeight: 700, color: isActive ? "#f59e0b" : isMe ? "#4ade80" : "rgba(255,255,255,0.32)" }}>
                     {isActive ? "▶ À jouer" : isMe ? "Toi" : `${p.cardsCount} cartes`}
@@ -493,7 +493,7 @@ export default function Game() {
           </div>
         )}
 
-        {/* ── Bouton FROP ───────────────────────────────────────────────────── */}
+        {/* ── Bouton GONE ───────────────────────────────────────────────────── */}
         {canDeclareFrop && (
           <div style={{ position: "absolute", bottom: "calc(28% + 52px)", left: "50%", transform: "translateX(-50%)", pointerEvents: "auto" }}>
             <button type="button" onClick={declareFrop}
@@ -505,7 +505,7 @@ export default function Game() {
                 boxShadow: "3px 3px 0 #000",
                 cursor: "pointer", whiteSpace: "nowrap",
               }}>
-              ♦ Jouer en FROP (+4 pts)
+              ♦ Jouer en GONE (+4 pts)
             </button>
           </div>
         )}

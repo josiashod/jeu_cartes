@@ -28,14 +28,15 @@ const rules = {
         items: [
           "Il faut fournir la famille demandee quand c'est possible.",
           'Une carte hors famille est jouee cachee.',
+          'Sortir avec un 7 permet de marquer 2 points.',
           'Sortir avec deux 7 permet de marquer 4 points.',
         ],
       },
       {
-        title: 'Mode FROP',
+        title: 'Mode GONE',
         items: [
-          "Avant de jouer sa premiere carte, un joueur peut declarer le FROP.",
-          "En FROP, toutes ses cartes sont visibles par les adversaires.",
+          "Avant de jouer sa premiere carte, un joueur peut declarer le GONE.",
+          "En GONE, toutes ses cartes sont visibles par les adversaires.",
           "S'il remporte la manche, il marque 4 points.",
           "S'il perd, c'est le gagnant du dernier pli qui marque 4 points.",
         ],
@@ -65,14 +66,15 @@ const rules = {
         items: [
           'You must follow the requested suit when possible.',
           'A card outside the requested suit is played hidden.',
+          'Going out with one 7 scores 2 points.',
           'Going out with two 7s scores 4 points.',
         ],
       },
       {
-        title: 'FROP Mode',
+        title: 'GONE Mode',
         items: [
-          'Before playing their first card, a player may declare FROP.',
-          'In FROP, all their cards are visible to opponents.',
+          'Before playing their first card, a player may declare GONE.',
+          'In GONE, all their cards are visible to opponents.',
           'If they win the round, they score 4 points.',
           'If they lose, the winner of the last trick scores 4 points.',
         ],
