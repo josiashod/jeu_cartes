@@ -16,6 +16,12 @@ export const FACE_COLORS = [
   '#FB923C', // Orange
   '#F87171', // Red
   '#2DD4BF', // Teal
+  '#A78BFA', // Violet
+  '#F472B6', // Pink
+  '#34D399', // Emerald
+  '#FCA5A5', // Rose
+  '#93C5FD', // Sky
+  '#FCD34D', // Amber
 ];
 
 export const EYE_COUNT = 6;

@@ -1,10 +1,11 @@
 'use client';
 import { Canvas, useFrame, useThree, ThreeEvent } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
-import { useMemo, useRef, useState, useEffect } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { Card, CardSuit, PlayedCard, PublicSipaPlayer } from '@/game';
-import { AvatarDisplay } from './AvatarDisplay';
+import { GameBoard3D, FeltMedallion, TableDecorations } from './GameBoardElements';
+import { Avatar3D } from './Avatar3D';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const CW = 0.72;
@@ -136,23 +137,27 @@ function CinematicCamera({ isRoundEnded = false }: CinematicCameraProps) {
 
   const targetPos = useMemo(() => {
     if (isRoundEnded) {
-      // Vue aérienne du haut (Top-down plongeante sur la table)
-      return new THREE.Vector3(0, 8.6, 0.4);
+      // Vue aérienne du haut (Top-down plongeante sur le plateau 3D)
+      return new THREE.Vector3(0, 9.2, 0.4);
     }
-    // Vue normale immersive face au joueur
-    return new THREE.Vector3(0, isMobile ? 6.2 : 5.5, isMobile ? 6.6 : 6.0);
+    // Vue gameplay immersive — plus basse et proche pour voir les bordures du plateau
+    // comme dans le concept art (angle rasant, piliers/lanternes bien visibles)
+    return new THREE.Vector3(0, isMobile ? 4.8 : 4.2, isMobile ? 6.2 : 5.6);
   }, [isRoundEnded, isMobile]);
 
   const targetLookAt = useMemo(() => {
     if (isRoundEnded) {
       return new THREE.Vector3(0, 0, 0);
     }
-    return new THREE.Vector3(0, 0, -0.5);
+    // Regard légèrement plus bas sur la table pour voir le médaillon
+    return new THREE.Vector3(0, -0.2, -0.8);
   }, [isRoundEnded]);
 
   useFrame((_, delta) => {
     const perspCamera = camera as THREE.PerspectiveCamera;
-    const targetFov = isRoundEnded ? 56 : (isMobile ? 72 : 60);
+    // FOV plus serré en gameplay pour un effet plus cinématique
+    const targetFov = isRoundEnded ? 62 : (isMobile ? 65 : 52);
+    perspCamera.fov += (targetFov - perspCamera.fov) * Math.min(1, delta * 3.5);
     perspCamera.fov += (targetFov - perspCamera.fov) * Math.min(1, delta * 3.5);
     perspCamera.updateProjectionMatrix();
 
@@ -166,25 +171,8 @@ function CinematicCamera({ isRoundEnded = false }: CinematicCameraProps) {
   return null;
 }
 
-// ── Tapis ─────────────────────────────────────────────────────────────────────
-function FeltTable() {
-  return (
-    <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[16, 12]} />
-        <meshStandardMaterial color="#1a5e30" roughness={0.95} metalness={0} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, -0.3]}>
-        <planeGeometry args={[8, 5.5]} />
-        <meshStandardMaterial color="#1e6836" roughness={0.95} transparent opacity={0.55} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]}>
-        <ringGeometry args={[5.6, 6.8, 64]} />
-        <meshStandardMaterial color="#18243a" roughness={0.6} />
-      </mesh>
-    </group>
-  );
-}
+// ── Tapis (remplacé par GameBoard3D + FeltMedallion + TableDecorations) ────────
+// L'ancien FeltTable est remplacé par les composants de GameBoardElements.tsx
 
 // ── Carte face visible ────────────────────────────────────────────────────────
 interface FaceCardProps {
@@ -373,27 +361,13 @@ export function OpponentHand({ count, basePos, hoveredIndex, mirrorAngle, player
           />
         )
       ))}
-      {/* Badge joueur en HTML 3D */}
-      <Html
-        position={[basePos[0], basePos[1] + 0.25, basePos[2] - 0.75]}
-        center
-        style={{ pointerEvents: 'none' }}
-      >
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 4,
-          background: 'rgba(8,14,28,0.72)',
-          border: '1px solid rgba(255,255,255,0.14)',
-          borderRadius: 100,
-          padding: '3px 10px 3px 4px',
-          backdropFilter: 'blur(10px)',
-          whiteSpace: 'nowrap',
-          fontSize: 11, fontWeight: 700, color: '#fff',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
-        }}>
-          <AvatarDisplay emoji={player.emoji} size={22} />
-          {player.username}
-        </div>
-      </Html>
+      {/* Avatar 3D du joueur */}
+      <Avatar3D
+        emoji={player.emoji}
+        username={player.username}
+        position={[basePos[0], basePos[1] + 0.35, basePos[2] - 0.9]}
+        scale={0.85}
+      />
     </group>
   );
 }
@@ -573,12 +547,37 @@ function Scene({
   return (
     <>
       <CinematicCamera isRoundEnded={isRoundEnded} />
-      <ambientLight intensity={0.68} />
-      <directionalLight position={[0, 10, 4]} intensity={0.52} color="#fff6e0" castShadow />
-      <pointLight position={[-4, 6, 3]} intensity={0.2} color="#a8e0ff" />
-      <pointLight position={[4, 6, 3]} intensity={0.2} color="#ffe8a0" />
 
-      <FeltTable />
+      {/* Éclairage atmosphérique — ambiance chaleureuse de diorama */}
+      <ambientLight intensity={0.45} color="#ffeedd" />
+      <directionalLight
+        position={[2, 12, 5]}
+        intensity={0.65}
+        color="#fff6e0"
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-near={1}
+        shadow-camera-far={25}
+        shadow-camera-left={-8}
+        shadow-camera-right={8}
+        shadow-camera-top={8}
+        shadow-camera-bottom={-8}
+        shadow-bias={-0.001}
+      />
+      {/* Lumières de remplissage latérales */}
+      <pointLight position={[-5, 5, 4]} intensity={0.18} color="#a8d8ff" />
+      <pointLight position={[5, 5, 4]} intensity={0.18} color="#ffe8a0" />
+      {/* Lumière arrière douce (contre-jour subtil) */}
+      <pointLight position={[0, 4, -5]} intensity={0.1} color="#c8b8ff" />
+      {/* Lumière basse sous la table (éclaire les côtés du plateau) */}
+      <pointLight position={[0, -0.5, 0]} intensity={0.08} color="#ffcc80" distance={8} />
+
+      {/* Plateau 3D + décorations */}
+      <GameBoard3D />
+      <FeltMedallion />
+      <TableDecorations />
+
       <TrickPile count={completedTricksCount} />
       <MyWonPile plays={myWonPlays} />
       <TrickArea plays={visiblePlays} mode={visibleMode} winnerId={visibleWinnerId} me={me} opponents={opponents} />
@@ -595,13 +594,22 @@ function Scene({
       ))}
 
       {me && (
-        <PlayerHand
-          hand={me.hand ?? []}
-          isMyTurn={isMyTurn}
-          onPlayCard={onPlayCard}
-          onHoverCard={onHoverCard}
-          onPlayableCardHover={onPlayableCardHover}
-        />
+        <>
+          <PlayerHand
+            hand={me.hand ?? []}
+            isMyTurn={isMyTurn}
+            onPlayCard={onPlayCard}
+            onHoverCard={onHoverCard}
+            onPlayableCardHover={onPlayableCardHover}
+          />
+          {/* Avatar 3D du joueur courant */}
+          <Avatar3D
+            emoji={me.emoji}
+            username={me.username}
+            position={[0, 0.3, PLAYER_Z + 0.8]}
+            scale={0.75}
+          />
+        </>
       )}
     </>
   );
@@ -616,8 +624,8 @@ export default function GameScene(props: GameSceneProps) {
       gl={{ antialias: true, alpha: false }}
       resize={{ scroll: false, debounce: { scroll: 50, resize: 0 } }}
     >
-      <color attach="background" args={['#0d3d1f']} />
-      <fog attach="fog" args={['#0d3d1f', 16, 26]} />
+      <color attach="background" args={['#0a2e18']} />
+      <fog attach="fog" args={['#0a2e18', 14, 24]} />
       <Scene {...props} />
     </Canvas>
   );
