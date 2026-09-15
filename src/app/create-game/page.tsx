@@ -6,7 +6,6 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import AvatarCreator from '@/components/AvatarCreator';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import RulesButton from '@/components/RulesButton';
-import CardPosterBackground from '@/components/CardPosterBackground';
 import { encodeAvatar, DEFAULT_AVATAR } from '@/lib/avatar';
 
 const GLASS: React.CSSProperties = {
@@ -49,8 +48,7 @@ export default function CreateGame() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: '#020617', position: 'relative', overflow: 'hidden' }}>
-      <CardPosterBackground />
+    <div className="min-h-screen" style={{ background: 'radial-gradient(ellipse at 60% 40%, #1a5e30 0%, #0d3d1f 55%, #071a0e 100%)', position: 'relative', overflow: 'hidden' }}>
 
       <header className="px-6 py-4 flex justify-between items-center relative z-10">
         <button onClick={() => router.push('/')} className="font-semibold text-sm flex items-center gap-2 transition-all hover:opacity-70" style={{ color: 'rgba(255,255,255,0.6)' }}>

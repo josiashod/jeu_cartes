@@ -6,8 +6,8 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 const rules = {
   fr: {
-    button: 'Règles',
-    title: 'Règles SIPA',
+    button: 'Regles',
+    title: 'Regles SIPA',
     sections: [
       {
         title: 'But',
@@ -17,18 +17,27 @@ const rules = {
         ],
       },
       {
-        title: 'Début de manche',
+        title: 'Debut de manche',
         items: [
-          'Les annonces 7-8-9 sont ouvertes uniquement au début de la manche.',
-          'Si un joueur possède 7, 8 et 9 de la même famille, il peut annoncer et marquer 2 points.',
+          'Les annonces 7-8-9 sont ouvertes uniquement au debut de la manche.',
+          'Si un joueur possede 7, 8 et 9 de la meme famille, il peut annoncer et marquer 2 points.',
         ],
       },
       {
         title: 'Cartes',
         items: [
-          'Il faut fournir la famille demandée quand c’est possible.',
-          'Une carte hors famille est jouée cachée.',
+          "Il faut fournir la famille demandee quand c'est possible.",
+          'Une carte hors famille est jouee cachee.',
           'Sortir avec deux 7 permet de marquer 4 points.',
+        ],
+      },
+      {
+        title: 'Mode FROP',
+        items: [
+          "Avant de jouer sa premiere carte, un joueur peut declarer le FROP.",
+          "En FROP, toutes ses cartes sont visibles par les adversaires.",
+          "S'il remporte la manche, il marque 4 points.",
+          "S'il perd, c'est le gagnant du dernier pli qui marque 4 points.",
         ],
       },
     ],
@@ -59,15 +68,19 @@ const rules = {
           'Going out with two 7s scores 4 points.',
         ],
       },
+      {
+        title: 'FROP Mode',
+        items: [
+          'Before playing their first card, a player may declare FROP.',
+          'In FROP, all their cards are visible to opponents.',
+          'If they win the round, they score 4 points.',
+          'If they lose, the winner of the last trick scores 4 points.',
+        ],
+      },
     ],
   },
 };
 
-/**
- * Affiche un bouton et une modale de règles dans le style table de jeu.
- *
- * @param props.compact Réduit le libellé pour les zones étroites.
- */
 export default function RulesButton({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -76,52 +89,45 @@ export default function RulesButton({ compact = false }: { compact?: boolean }) 
   const modal = open && mounted ? (
     <div
       className="fixed inset-0 flex items-center justify-center p-4"
-      style={{
-        zIndex: 2147483000,
-        background: 'rgba(3, 6, 20, 0.42)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) setOpen(false);
-      }}
+      style={{ zIndex: 2147483000, background: 'rgba(0,0,0,0.78)' }}
+      onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}
     >
-      <div
-        className="w-full max-w-md overflow-hidden rounded-2xl"
-        style={{
-          background: 'rgba(255,255,255,0.98)',
-          border: '2px solid var(--cream-border)',
-          boxShadow: '0 32px 90px rgba(0,0,0,0.55)',
-          maxHeight: 'min(86vh, 680px)',
-        }}
-      >
-        <div
-          className="flex items-center justify-between gap-3 px-5 py-4"
-          style={{ background: 'var(--green-primary)', borderBottom: '2px solid var(--green-dark)' }}
-        >
-          <h2 className="text-xl font-black text-white">{copy.title}</h2>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="h-9 w-9 rounded-full font-black text-white"
-            style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.24)' }}
+      <div style={{
+        width: '100%', maxWidth: 420,
+        background: '#071a0e', border: '2px solid #1a5e30',
+        boxShadow: '6px 6px 0 #000', borderRadius: 12, overflow: 'hidden',
+        maxHeight: 'min(90vh, 680px)', display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          padding: '14px 18px', background: '#0f2819', borderBottom: '2px solid #1a5e30',
+        }}>
+          <h2 style={{ fontSize: 18, fontWeight: 900, color: '#fff', fontFamily: 'Georgia, serif' }}>{copy.title}</h2>
+          <button type="button" onClick={() => setOpen(false)}
+            style={{
+              width: 32, height: 32, borderRadius: 6, border: '2px solid #1a5e30',
+              background: '#071a0e', boxShadow: '2px 2px 0 #000',
+              color: '#fff', fontWeight: 900, fontSize: 18, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
             aria-label="Fermer"
-          >
-            ×
-          </button>
+          >x</button>
         </div>
 
-        <div className="space-y-4 overflow-y-auto px-5 py-5 text-gray-900" style={{ maxHeight: 'calc(min(86vh, 680px) - 70px)' }}>
+        <div style={{ overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {copy.sections.map((section) => (
             <section key={section.title}>
-              <h3 className="mb-2 text-sm font-black uppercase tracking-widest" style={{ color: 'var(--green-dark)' }}>
+              <h3 style={{
+                fontSize: 10, fontWeight: 900, letterSpacing: '0.14em',
+                textTransform: 'uppercase', color: '#4ade80', marginBottom: 8,
+              }}>
                 {section.title}
               </h3>
-              <ul className="space-y-2 text-sm font-semibold leading-relaxed">
+              <ul style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {section.items.map((item) => (
-                  <li key={item} className="flex gap-2">
-                    <span style={{ color: 'var(--gold-dark)' }}>•</span>
-                    <span>{item}</span>
+                  <li key={item} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <span style={{ color: '#f59e0b', fontWeight: 900, flexShrink: 0, marginTop: 1 }}>&#9658;</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.82)', lineHeight: 1.5 }}>{item}</span>
                   </li>
                 ))}
               </ul>
@@ -141,16 +147,18 @@ export default function RulesButton({ compact = false }: { compact?: boolean }) 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-full font-black transition-all hover:-translate-y-0.5 active:translate-y-0"
         style={{
-          background: 'rgba(245,158,11,0.14)',
-          border: '1px solid rgba(245,158,11,0.42)',
-          color: '#fbbf24',
-          boxShadow: '0 3px 0 rgba(120,53,15,0.85)',
-          padding: compact ? '7px 10px' : '8px 14px',
-          fontSize: compact ? 12 : 13,
+          background: '#92400e',
+          border: '2px solid #b45309',
+          boxShadow: '2px 2px 0 #000',
+          color: '#fff',
+          padding: compact ? '6px 10px' : '7px 14px',
+          fontSize: compact ? 11 : 12,
+          fontWeight: 900,
           lineHeight: 1,
           whiteSpace: 'nowrap',
+          borderRadius: 6,
+          cursor: 'pointer',
         }}
       >
         {compact ? '?' : `? ${copy.button}`}

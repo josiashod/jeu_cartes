@@ -40,6 +40,7 @@ export interface SipaGameState {
   currentTrick: PlayedCard[];
   completedTricks: CompletedTrick[];
   comboWindowOpen: boolean;
+  fropPlayerId?: string;
   status: "playing" | "round-ended" | "finished";
   settings: SipaGameSettings;
   lastMessage?: string;
@@ -64,6 +65,7 @@ export interface PublicSipaGameState {
   completedTricks: CompletedTrick[];
   comboWindowOpen: boolean;
   comboOptions: Combo789Option[];
+  fropPlayerId?: string;
   status: SipaGameState["status"];
   settings: SipaGameSettings;
   lastMessage?: string;
@@ -108,7 +110,6 @@ export function createSipaGame(
     comboWindowOpen: true,
     status: "playing",
     settings: { targetScore },
-    lastMessage: "La partie commence. Les annonces 7-8-9 sont ouvertes.",
   };
 }
 
@@ -134,11 +135,12 @@ export function toPublicSipaState(
       isCreator: player.isCreator,
       score: player.score,
       cardsCount: player.hand.length,
-      hand: player.id === viewerId ? player.hand : undefined,
+      hand: (player.id === viewerId || player.id === state.fropPlayerId) ? player.hand : undefined,
     })),
     comboOptions: state.comboWindowOpen
       ? findCombo789Options(viewer?.hand ?? [])
       : [],
+    fropPlayerId: state.fropPlayerId,
   };
 }
 
@@ -228,6 +230,29 @@ export function declareCombo789Win(
 }
 
 /**
+ * Déclare le mode frop : les cartes du joueur sont visibles par tous.
+ * Si ce joueur gagne la manche, il marque 4 points ; sinon le gagnant marque 4 points.
+ */
+export function declareFrop(state: SipaGameState, playerId: string): SipaGameState {
+  if (state.status !== "playing") {
+    throw new Error("La partie n'est pas en cours.");
+  }
+
+  if (!state.comboWindowOpen || state.currentTrick.length > 0 || state.completedTricks.length > 0) {
+    throw new Error("Le frop ne peut être déclaré qu'au début de la manche.");
+  }
+
+  if (state.fropPlayerId) {
+    throw new Error("Un frop a déjà été déclaré pour cette manche.");
+  }
+
+  const player = findPlayer(state, playerId);
+  state.fropPlayerId = playerId;
+  state.comboWindowOpen = false;
+  return state;
+}
+
+/**
  * Lance une nouvelle manche en conservant les scores courants.
  *
  * @param state État à réinitialiser pour une nouvelle manche.
@@ -246,12 +271,13 @@ export function startNextRound(state: SipaGameState): SipaGameState {
       hand: hands[player.id],
       score: previousScores.get(player.id) ?? 0,
     })),
-    currentPlayerId: state.currentPlayerId, // Le gagnant de la manche précédente commence
+    currentPlayerId: state.currentPlayerId,
     currentTrick: [],
     completedTricks: [],
     comboWindowOpen: true,
+    fropPlayerId: undefined,
     status: "playing",
-    lastMessage: "Nouvelle manche. Les annonces 7-8-9 sont ouvertes.",
+    lastMessage: undefined,
     winnerId: undefined,
   };
 }
@@ -289,17 +315,32 @@ function findWinningPlay(plays: PlayedCard[]): PlayedCard {
 
 function scoreRound(state: SipaGameState, lastWinnerPlay: PlayedCard): void {
   const player = findPlayer(state, lastWinnerPlay.playerId);
-  const previousTrick = state.completedTricks.at(-2);
-  const foprrrr =
-    previousTrick?.winnerId === player.id &&
-    previousTrick.winningCard.value === CardValue.Seven &&
-    lastWinnerPlay.card.value === CardValue.Seven;
 
-  const points = foprrrr ? 4 : lastWinnerPlay.card.value === CardValue.Seven ? 2 : 1;
+  let points: number;
+  let message: string;
+
+  if (state.fropPlayerId) {
+    points = 4;
+    const fropPlayer = state.players.find((p) => p.id === state.fropPlayerId);
+    if (lastWinnerPlay.playerId === state.fropPlayerId) {
+      message = `${player.username} réussit son FROP et marque ${points} points ! 🃏`;
+    } else {
+      message = `${fropPlayer?.username ?? "Frop"} échoue son FROP ! ${player.username} marque ${points} points.`;
+    }
+  } else {
+    const previousTrick = state.completedTricks.at(-2);
+    const foprrrr =
+      previousTrick?.winnerId === player.id &&
+      previousTrick.winningCard.value === CardValue.Seven &&
+      lastWinnerPlay.card.value === CardValue.Seven;
+    points = foprrrr ? 4 : lastWinnerPlay.card.value === CardValue.Seven ? 2 : 1;
+    message = `${player.username} marque ${points} point${points > 1 ? "s" : ""}.`;
+  }
+
   player.score += points;
   state.status = player.score >= state.settings.targetScore ? "finished" : "round-ended";
   state.winnerId = state.status === "finished" ? player.id : undefined;
-  state.lastMessage = `${player.username} marque ${points} point${points > 1 ? "s" : ""}.`;
+  state.lastMessage = message;
 }
 
 function findPlayer(state: SipaGameState, playerId: string): SipaPlayer {

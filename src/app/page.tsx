@@ -48,7 +48,7 @@ export default function Home() {
                 textShadow: '0 0 12px rgba(245,158,11,0.7)',
               }}>♦</span>
             </span>
-            P<span style={{ color: '#4ade80', marginLeft: '-0.176em' }}>♠</span>
+            P<span style={{ color: '#4ade80', marginLeft: '-0.08em' }}>♠</span>
           </h1>
           <div className="mx-auto mt-4 rounded-full"
             style={{ width: 52, height: 2, background: 'rgba(255,255,255,0.2)' }} />

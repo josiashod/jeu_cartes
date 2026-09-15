@@ -157,6 +157,7 @@ function FeltTable() {
   );
 }
 
+
 // ── Carte face visible ────────────────────────────────────────────────────────
 interface FaceCardProps {
   card: Card;
@@ -186,9 +187,9 @@ function FaceCard({
     if (!meshRef.current || !matRef.current) return;
     const lift = hoveredRef.current && isPlayable ? 0.55 : 0;
     const ty = baseY + lift;
-    meshRef.current.position.y += (ty - meshRef.current.position.y) * 0.14;
+    meshRef.current.position.y += (ty - meshRef.current.position.y) * 0.07;
     const te = (hoveredRef.current && isPlayable) || isHighlighted ? 0.28 : 0;
-    matRef.current.emissiveIntensity += (te - matRef.current.emissiveIntensity) * 0.15;
+    matRef.current.emissiveIntensity += (te - matRef.current.emissiveIntensity) * 0.08;
   });
 
   return (
@@ -230,9 +231,9 @@ function BackCard({ pos, fanAngle = 0, tilt = 0, zIndex = 0, isHighlighted }: Ba
   useFrame(() => {
     if (!meshRef.current || !matRef.current) return;
     const ty = baseY + (isHighlighted ? 0.5 : 0);
-    meshRef.current.position.y += (ty - meshRef.current.position.y) * 0.14;
+    meshRef.current.position.y += (ty - meshRef.current.position.y) * 0.07;
     const te = isHighlighted ? 0.32 : 0;
-    matRef.current.emissiveIntensity += (te - matRef.current.emissiveIntensity) * 0.15;
+    matRef.current.emissiveIntensity += (te - matRef.current.emissiveIntensity) * 0.08;
   });
 
   return (
@@ -328,17 +329,30 @@ interface OpponentHandProps {
 export function OpponentHand({ count, basePos, hoveredIndex, mirrorAngle, player }: OpponentHandProps) {
   const n = Math.max(1, count);
   const layout = useMemo(() => opponentHandLayout(n), [n]);
+  const isFrop = Array.isArray(player.hand) && player.hand.length > 0;
   return (
     <group>
       {layout.map(({ x, z, angle }, i) => (
-        <BackCard
-          key={i}
-          pos={[basePos[0] + x, basePos[1], basePos[2] + z]}
-          fanAngle={mirrorAngle ? angle : -angle}
-          tilt={OPPONENT_TILT}
-          zIndex={i}
-          isHighlighted={hoveredIndex === i}
-        />
+        isFrop && player.hand![i] ? (
+          <FaceCard
+            key={i}
+            card={player.hand![i]}
+            pos={[basePos[0] + x, basePos[1], basePos[2] + z]}
+            fanAngle={mirrorAngle ? angle : -angle}
+            tilt={OPPONENT_TILT}
+            zIndex={i}
+            isHighlighted={hoveredIndex === i}
+          />
+        ) : (
+          <BackCard
+            key={i}
+            pos={[basePos[0] + x, basePos[1], basePos[2] + z]}
+            fanAngle={mirrorAngle ? angle : -angle}
+            tilt={OPPONENT_TILT}
+            zIndex={i}
+            isHighlighted={hoveredIndex === i}
+          />
+        )
       ))}
       {/* Badge joueur en HTML 3D */}
       <Html
@@ -361,6 +375,42 @@ export function OpponentHand({ count, basePos, hoveredIndex, mirrorAngle, player
           {player.username}
         </div>
       </Html>
+    </group>
+  );
+}
+
+// ── Carte animée (pli) ───────────────────────────────────────────────────────
+// Enveloppe un groupe dont la position lerp vers la cible sur les 3 axes.
+interface AnimatedTrickCardProps {
+  play: PlayedCard;
+  pos: [number, number, number];
+  fanAngle: number;
+  zIndex: number;
+}
+
+function AnimatedTrickCard({ play, pos, fanAngle, zIndex }: AnimatedTrickCardProps) {
+  const groupRef = useRef<THREE.Group>(null!);
+  const targetRef = useRef<[number, number, number]>(pos);
+  targetRef.current = pos;
+
+  useEffect(() => {
+    if (groupRef.current) groupRef.current.position.set(pos[0], pos[1], pos[2]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useFrame(() => {
+    if (!groupRef.current) return;
+    const [tx, ty, tz] = targetRef.current;
+    groupRef.current.position.x += (tx - groupRef.current.position.x) * 0.09;
+    groupRef.current.position.y += (ty - groupRef.current.position.y) * 0.09;
+    groupRef.current.position.z += (tz - groupRef.current.position.z) * 0.09;
+  });
+
+  return (
+    <group ref={groupRef}>
+      {play.hidden
+        ? <BackCard pos={[0, 0, 0]} fanAngle={fanAngle} zIndex={zIndex} />
+        : <FaceCard card={play.card} pos={[0, 0, 0]} fanAngle={fanAngle} zIndex={zIndex} />}
     </group>
   );
 }
@@ -395,10 +445,14 @@ function TrickArea({ plays, mode, winnerId, me, opponents }: TrickAreaProps) {
         const x = anchor[0] + Math.sin(a) * r + scatter;
         const y = anchor[1] + (mode === 'last' ? 0.18 : 0);
         const z = anchor[2] - Math.cos(a) * r * 0.55;
-        return play.hidden ? (
-          <BackCard key={play.playerId} pos={[x, y, z]} fanAngle={scatter * 0.5} zIndex={i} />
-        ) : (
-          <FaceCard key={play.playerId} card={play.card} pos={[x, y + i * 0.003, z]} fanAngle={scatter * 0.5} zIndex={i} />
+        return (
+          <AnimatedTrickCard
+            key={play.playerId}
+            play={play}
+            pos={[x, y, z]}
+            fanAngle={scatter * 0.5}
+            zIndex={i}
+          />
         );
       })}
     </group>

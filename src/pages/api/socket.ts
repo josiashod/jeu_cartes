@@ -2,7 +2,7 @@ import { Server } from 'socket.io';
 import { NextApiRequest, NextApiResponse } from 'next';
 import type { Server as HttpServer } from 'http';
 import { Player, GameSettings, Game } from '@/types';
-import { CardSuit, createSipaGame, declareCombo789Win, playCard, startNextRound, toPublicSipaState } from '@/game';
+import { CardSuit, createSipaGame, declareCombo789Win, declareFrop, playCard, startNextRound, toPublicSipaState } from '@/game';
 
 type SocketResponse = NextApiResponse & {
   socket: NonNullable<NextApiResponse["socket"]> & {
@@ -308,6 +308,24 @@ const ioHandler = (req: NextApiRequest, res: SocketResponse) => {
         }
       });
 
+      socket.on('declare_frop', ({ roomCode }) => {
+        if (typeof roomCode !== 'string') return;
+
+        const game = games[roomCode];
+
+        if (!game?.session) {
+          socket.emit('game_error', 'Partie introuvable.');
+          return;
+        }
+
+        try {
+          declareFrop(game.session, socket.id);
+          broadcastGameState(roomCode);
+        } catch (error) {
+          socket.emit('game_error', error instanceof Error ? error.message : 'Frop refusé.');
+        }
+      });
+
       socket.on('next_round', ({ roomCode }) => {
         if (typeof roomCode !== 'string') return;
 
@@ -411,6 +429,7 @@ interface ClientToServerEvents {
   start_game: (data: { roomCode: string }) => void;
   play_card: (data: { roomCode: string; cardId: string }) => void;
   declare_combo_789: (data: { roomCode: string; suit: CardSuit }) => void;
+  declare_frop: (data: { roomCode: string }) => void;
   next_round: (data: { roomCode: string }) => void;
   create_channel: (channel: string) => void; // Legacy
   get_users: (channel: string) => void; // Legacy
