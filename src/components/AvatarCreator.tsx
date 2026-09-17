@@ -70,10 +70,10 @@ export default function AvatarCreator({ value, onChange }: AvatarCreatorProps) {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
 
       {/* Avatar + overlaid controls */}
-      <div style={{ position: 'relative', width: AV + 80, height: AV }}>
+      <div style={{ position: 'relative', width: '100%', height: AV }}>
 
         {/* Avatar centered */}
-        <div style={{ position: 'absolute', left: 40, top: 0 }}>
+        <div style={{ position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)' }}>
           <AvatarSvg config={config} size={AV} />
         </div>
 
@@ -95,7 +95,7 @@ export default function AvatarCreator({ value, onChange }: AvatarCreatorProps) {
       </div>
 
       {/* Couleur — ligne compacte en dessous */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: AV + 80 }}>
+      <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
         <Arr dir="‹" color="#C084FC" onClick={() => update('face', (config.face - 1 + COLOR_COUNT) % COLOR_COUNT)} />
         <div style={{ flex: 1, display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center' }}>
           {FACE_COLORS.map((c, i) => (
