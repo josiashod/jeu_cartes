@@ -105,11 +105,19 @@ export default function Lobby() {
     if (!profile) return;
     getSocket().emit('create_game', { roomCode: channel, username: profile.username, emoji: profile.emoji, maxPlayers: n });
   };
+  const addBot = () => {
+    if (typeof channel === 'string') getSocket().emit('add_bot', { roomCode: channel });
+  };
+  const removeBot = (botId: string) => {
+    if (typeof channel === 'string') getSocket().emit('remove_bot', { roomCode: channel, botId });
+  };
+  const isBotPlayer = (id: string) => id.startsWith('bot-');
 
   const isCreator = Boolean(socketId && gameSettings?.creatorId === socketId)
     || Boolean(socketId && players.some(p => p.id === socketId && p.isCreator))
     || (isCreatorFallback && !gameSettings);
   const canStartGame = isCreator && players.length >= 2;
+  const canAddBot = isCreator && players.length < (gameSettings?.maxPlayers ?? 4);
   const myPosition = players.findIndex(p => p.id === socketId);
 
   return (
@@ -153,21 +161,37 @@ export default function Lobby() {
                   </div>
                 ) : players.map((player, index) => {
                   const isMe = player.id === socketId || (player.id === 'local-creator' && isCreator);
+                  const isPlayerBot = isBotPlayer(player.id);
                   return (
                     <div key={player.id} className="flex items-center gap-3 px-4 py-3 animate-fadeIn"
-                      style={{ background: isMe ? 'rgba(74,222,128,0.08)' : 'transparent', borderTop: index > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none', animationDelay: `${index * 0.06}s` }}>
+                      style={{ background: isMe ? 'rgba(74,222,128,0.08)' : isPlayerBot ? 'rgba(99,102,241,0.06)' : 'transparent', borderTop: index > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none', animationDelay: `${index * 0.06}s` }}>
                       <span className="text-xs font-bold w-4 text-right" style={{ color: 'rgba(255,255,255,0.3)' }}>{index + 1}</span>
                       <AvatarDisplay emoji={player.emoji} size={32} />
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-sm truncate" style={{ color: isMe ? '#4ade80' : '#fff' }}>
+                        <p className="font-bold text-sm truncate" style={{ color: isMe ? '#4ade80' : isPlayerBot ? '#a5b4fc' : '#fff' }}>
                           {player.username}{isMe && <span className="ml-1 text-xs opacity-40">(toi)</span>}
                         </p>
                         {player.isCreator && <p className="text-xs font-bold" style={{ color: '#fbbf24' }}>★ Hôte</p>}
+                        {isPlayerBot && <p className="text-xs font-bold" style={{ color: '#818cf8' }}>🤖 Bot</p>}
                       </div>
-                      <div className="w-2 h-2 rounded-full" style={{ background: '#22c55e', flexShrink: 0 }} />
+                      {isPlayerBot && isCreator ? (
+                        <button onClick={() => removeBot(player.id)} className="text-xs font-bold px-2 py-1 rounded-lg transition-all hover:opacity-80"
+                          style={{ background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.3)', color: '#fca5a5', cursor: 'pointer', flexShrink: 0 }}>
+                          ✕
+                        </button>
+                      ) : (
+                        <div className="w-2 h-2 rounded-full" style={{ background: isPlayerBot ? '#818cf8' : '#22c55e', flexShrink: 0 }} />
+                      )}
                     </div>
                   );
                 })}
+                {/* Bouton ajouter un bot */}
+                {canAddBot && (
+                  <button onClick={addBot} className="w-full py-3 text-sm font-bold transition-all hover:opacity-80 flex items-center justify-center gap-2"
+                    style={{ background: 'rgba(99,102,241,0.08)', borderTop: '1px solid rgba(255,255,255,0.06)', color: '#a5b4fc', cursor: 'pointer' }}>
+                    🤖 + Ajouter un bot
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -3,6 +3,10 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import type { Server as HttpServer } from 'http';
 import { Player, GameSettings, Game } from '@/types';
 import { CardSuit, createSipaGame, declareCombo789Win, declareFrop, playCard, startNextRound, toPublicSipaState } from '@/game';
+import {
+  BotPersonality, chooseBotCard, shouldDeclareCombo789, shouldDeclareFrop,
+  pickBotName, pickBotAvatar, pickBotPersonality,
+} from '@/game/botAI';
 
 type SocketResponse = NextApiResponse & {
   socket: NonNullable<NextApiResponse["socket"]> & {
@@ -39,6 +43,112 @@ const ioHandler = (req: NextApiRequest, res: SocketResponse) => {
 
     const games: Games = {};
 
+    /** Personnalités des bots (botId → BotPersonality) */
+    const botPersonalities: Record<string, BotPersonality> = {};
+
+    /** Compteur pour générer des IDs de bots uniques */
+    let botIdCounter = 0;
+
+    /** Vérifie si un joueur est un bot */
+    function isBot(playerId: string): boolean {
+      return playerId.startsWith('bot-');
+    }
+
+    /** Crée un nouveau joueur bot et l'ajoute à la partie */
+    function createBotPlayer(game: Game): Player {
+      botIdCounter += 1;
+      const botId = `bot-${botIdCounter}-${Date.now().toString(36)}`;
+      const existingNames = game.players.map((p) => p.username);
+      const username = pickBotName(existingNames);
+      const emoji = pickBotAvatar(botIdCounter);
+      const personality = pickBotPersonality();
+      botPersonalities[botId] = personality;
+
+      return {
+        id: botId,
+        username,
+        emoji,
+        isCreator: false,
+      };
+    }
+
+    /**
+     * Planifie le tour d'un bot avec un délai réaliste.
+     * Enchaîne automatiquement si le joueur suivant est aussi un bot.
+     */
+    function scheduleBotTurn(roomCode: string): void {
+      const game = games[roomCode];
+      if (!game?.session || game.session.status !== 'playing') return;
+
+      // D'abord, vérifier les annonces de TOUS les bots au début de la manche
+      if (game.session.comboWindowOpen && game.session.currentTrick.length === 0 && game.session.completedTricks.length === 0) {
+        scheduleBotsAnnouncements(roomCode);
+        // Si après les annonces la manche est finie, on s'arrête
+        const g = games[roomCode];
+        if (!g?.session || g.session.status !== 'playing') return;
+      }
+
+      const currentId = game.session.currentPlayerId;
+      if (!isBot(currentId)) return;
+
+      const delay = 800 + Math.random() * 700; // 800-1500ms
+      setTimeout(() => {
+        const g = games[roomCode];
+        if (!g?.session || g.session.status !== 'playing') return;
+        if (g.session.currentPlayerId !== currentId) return; // Déjà joué
+
+        const personality = botPersonalities[currentId] ?? 'malin';
+
+        try {
+          const card = chooseBotCard(g.session, currentId, personality);
+          playCard(g.session, currentId, card.id);
+          // playCard() mute status en interne, TS ne peut pas le détecter
+          const status = g.session.status as string;
+          if (status === 'finished') g.settings.status = 'finished';
+
+          broadcastGameState(roomCode);
+
+          // Enchaîner si le prochain joueur est un bot
+          if (status === 'playing') {
+            scheduleBotTurn(roomCode);
+          }
+        } catch (error) {
+          console.error(`Bot ${currentId} error:`, error);
+        }
+      }, delay);
+    }
+
+    /**
+     * Vérifie les annonces (combo 789, GONE) de tous les bots au début de manche.
+     * Exécuté de façon synchrone puisque les annonces sont instantanées.
+     */
+    function scheduleBotsAnnouncements(roomCode: string): void {
+      const game = games[roomCode];
+      if (!game?.session || game.session.status !== 'playing') return;
+      if (!game.session.comboWindowOpen) return;
+
+      for (const player of game.session.players) {
+        if (!isBot(player.id)) continue;
+
+        // Vérifier combo 7-8-9
+        const comboSuit = shouldDeclareCombo789(game.session, player.id);
+        if (comboSuit) {
+          declareCombo789Win(game.session, player.id, comboSuit);
+          if ((game.session.status as string) === 'finished') game.settings.status = 'finished';
+          broadcastGameState(roomCode);
+          return; // Manche terminée par le combo
+        }
+
+        // Vérifier GONE
+        const personality = botPersonalities[player.id] ?? 'malin';
+        if (shouldDeclareFrop(game.session, player.id, personality)) {
+          declareFrop(game.session, player.id);
+          broadcastGameState(roomCode);
+          // Continuer — le GONE ne termine pas la manche
+        }
+      }
+    }
+
     /**
      * Ajoute ou met à jour un joueur dans une partie sans dupliquer sa socket.
      *
@@ -69,6 +179,7 @@ const ioHandler = (req: NextApiRequest, res: SocketResponse) => {
       }
 
       for (const player of game.players) {
+        if (isBot(player.id)) continue; // Les bots n'ont pas de socket
         io.to(player.id).emit('game_state', toPublicSipaState(game.session, player.id));
       }
     };
@@ -258,6 +369,7 @@ const ioHandler = (req: NextApiRequest, res: SocketResponse) => {
         game.settings.status = 'playing';
         io.to(roomCode).emit('game_started');
         broadcastGameState(roomCode);
+        scheduleBotTurn(roomCode); // Lancer le tour du bot si c'est le premier joueur
         console.log(`Game ${roomCode} started with ${game.players.length} players`);
       });
 
@@ -277,6 +389,7 @@ const ioHandler = (req: NextApiRequest, res: SocketResponse) => {
             game.settings.status = 'finished';
           }
           broadcastGameState(roomCode);
+          scheduleBotTurn(roomCode); // Enchaîner si le prochain joueur est un bot
         } catch (error) {
           socket.emit('game_error', error instanceof Error ? error.message : 'Coup refuse.');
         }
@@ -303,6 +416,7 @@ const ioHandler = (req: NextApiRequest, res: SocketResponse) => {
             game.settings.status = 'finished';
           }
           broadcastGameState(roomCode);
+          scheduleBotTurn(roomCode);
         } catch (error) {
           socket.emit('game_error', error instanceof Error ? error.message : 'Annonce refusee.');
         }
@@ -321,6 +435,7 @@ const ioHandler = (req: NextApiRequest, res: SocketResponse) => {
         try {
           declareFrop(game.session, socket.id);
           broadcastGameState(roomCode);
+          scheduleBotTurn(roomCode);
         } catch (error) {
           socket.emit('game_error', error instanceof Error ? error.message : 'Frop refusé.');
         }
@@ -348,6 +463,7 @@ const ioHandler = (req: NextApiRequest, res: SocketResponse) => {
 
         game.session = startNextRound(game.session);
         broadcastGameState(roomCode);
+        scheduleBotTurn(roomCode); // Lancer les bots pour la nouvelle manche
       });
 
       // Legacy support for old events
@@ -385,11 +501,47 @@ const ioHandler = (req: NextApiRequest, res: SocketResponse) => {
         socket.to(roomCode).emit('opponent_card_hover', { playerId: socket.id, cardIndex: null });
       });
 
+      // ── Gestion des bots ────────────────────────────────────────────────────
+      socket.on('add_bot', ({ roomCode }) => {
+        if (typeof roomCode !== 'string') return;
+
+        const game = games[roomCode];
+        if (!game) return;
+        if (socket.id !== game.settings.creatorId) return;
+        if (game.settings.status !== 'waiting') return;
+        if (game.players.length >= game.settings.maxPlayers) {
+          socket.emit('game_error', 'Le nombre maximum de joueurs est atteint.');
+          return;
+        }
+
+        const bot = createBotPlayer(game);
+        game.players.push(bot);
+        io.to(roomCode).emit('update_players', game.players);
+        console.log(`Bot ${bot.username} (${bot.id}) added to room ${roomCode}`);
+      });
+
+      socket.on('remove_bot', ({ roomCode, botId }) => {
+        if (typeof roomCode !== 'string' || typeof botId !== 'string') return;
+
+        const game = games[roomCode];
+        if (!game) return;
+        if (socket.id !== game.settings.creatorId) return;
+        if (game.settings.status !== 'waiting') return;
+        if (!isBot(botId)) return;
+
+        game.players = game.players.filter((p) => p.id !== botId);
+        delete botPersonalities[botId];
+        io.to(roomCode).emit('update_players', game.players);
+        console.log(`Bot ${botId} removed from room ${roomCode}`);
+      });
+
       socket.on('close_room', ({ roomCode }) => {
         if (typeof roomCode !== 'string') return;
         const game = games[roomCode];
         if (!game) return;
         if (socket.id !== game.settings.creatorId) return;
+        // Nettoyer les personnalités des bots
+        game.players.filter((p) => isBot(p.id)).forEach((p) => delete botPersonalities[p.id]);
         socket.to(roomCode).emit('room_closed');
         delete games[roomCode];
         console.log(`Room ${roomCode} closed by creator`);
@@ -431,6 +583,8 @@ interface ClientToServerEvents {
   declare_combo_789: (data: { roomCode: string; suit: CardSuit }) => void;
   declare_frop: (data: { roomCode: string }) => void;
   next_round: (data: { roomCode: string }) => void;
+  add_bot: (data: { roomCode: string }) => void;
+  remove_bot: (data: { roomCode: string; botId: string }) => void;
   create_channel: (channel: string) => void; // Legacy
   get_users: (channel: string) => void; // Legacy
   send_message: (data: { channel: string; message: string }) => void;

@@ -158,7 +158,6 @@ function CinematicCamera({ isRoundEnded = false }: CinematicCameraProps) {
     // FOV plus serré en gameplay pour un effet plus cinématique
     const targetFov = isRoundEnded ? 62 : (isMobile ? 65 : 52);
     perspCamera.fov += (targetFov - perspCamera.fov) * Math.min(1, delta * 3.5);
-    perspCamera.fov += (targetFov - perspCamera.fov) * Math.min(1, delta * 3.5);
     perspCamera.updateProjectionMatrix();
 
     const alpha = Math.min(1, delta * 3.2);
@@ -378,24 +377,32 @@ interface AnimatedTrickCardProps {
   pos: [number, number, number];
   fanAngle: number;
   zIndex: number;
+  fromPos?: [number, number, number];
 }
 
-function AnimatedTrickCard({ play, pos, fanAngle, zIndex }: AnimatedTrickCardProps) {
+function AnimatedTrickCard({ play, pos, fanAngle, zIndex, fromPos }: AnimatedTrickCardProps) {
   const groupRef = useRef<THREE.Group>(null!);
   const targetRef = useRef<[number, number, number]>(pos);
+  const initializedRef = useRef(false);
   targetRef.current = pos;
 
   useEffect(() => {
-    if (groupRef.current) groupRef.current.position.set(pos[0], pos[1], pos[2]);
+    if (groupRef.current && !initializedRef.current) {
+      // Démarrer depuis la position du joueur pour animer le dépôt
+      const start = fromPos ?? pos;
+      groupRef.current.position.set(start[0], start[1], start[2]);
+      initializedRef.current = true;
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useFrame(() => {
     if (!groupRef.current) return;
     const [tx, ty, tz] = targetRef.current;
-    groupRef.current.position.x += (tx - groupRef.current.position.x) * 0.09;
-    groupRef.current.position.y += (ty - groupRef.current.position.y) * 0.09;
-    groupRef.current.position.z += (tz - groupRef.current.position.z) * 0.09;
+    // Animation fluide vers la position cible (lerp factor 0.06 = plus doux)
+    groupRef.current.position.x += (tx - groupRef.current.position.x) * 0.06;
+    groupRef.current.position.y += (ty - groupRef.current.position.y) * 0.06;
+    groupRef.current.position.z += (tz - groupRef.current.position.z) * 0.06;
   });
 
   return (
@@ -427,22 +434,49 @@ function getPlayerAnchor(playerId: string | undefined, me: PublicSipaPlayer | un
 function TrickArea({ plays, mode, winnerId, me, opponents }: TrickAreaProps) {
   if (plays.length === 0) return null;
   const n = plays.length;
-  const anchor = mode === 'last' ? getPlayerAnchor(winnerId, me, opponents) : [0, 0.46, -0.18] as [number, number, number];
+
+  if (mode === 'last') {
+    // Les cartes volent vers le gagnant du pli
+    const winnerAnchor = getPlayerAnchor(winnerId, me, opponents);
+    return (
+      <group>
+        {plays.map((play, i) => (
+          <AnimatedTrickCard
+            key={play.playerId}
+            play={play}
+            pos={[
+              winnerAnchor[0] + (i - (n - 1) / 2) * 0.15,
+              winnerAnchor[1] + 0.2,
+              winnerAnchor[2],
+            ]}
+            fanAngle={0}
+            zIndex={i}
+          />
+        ))}
+      </group>
+    );
+  }
+
+  // Mode 'current' : les cartes sont posées proprement au centre en ligne
+  // Chaque carte vient de la position du joueur qui l'a jouée
+  const centerY = 0.46;
+  const centerZ = -0.3;
+  const cardSpacing = CW + 0.12; // Largeur carte + espace
+
   return (
     <group>
       {plays.map((play, i) => {
-        const a = (i / n) * Math.PI * 2;
-        const r = mode === 'last' ? Math.min(0.62, n * 0.16) : Math.min(0.54, n * 0.13);
-        const scatter = Math.sin(i * 7.3) * 0.07;
-        const x = anchor[0] + Math.sin(a) * r + scatter;
-        const y = anchor[1] + (mode === 'last' ? 0.18 : 0);
-        const z = anchor[2] - Math.cos(a) * r * 0.55;
+        const x = (i - (n - 1) / 2) * cardSpacing;
+        // Position d'origine = le joueur qui a joué cette carte
+        const fromAnchor = getPlayerAnchor(play.playerId, me, opponents);
+
         return (
           <AnimatedTrickCard
             key={play.playerId}
             play={play}
-            pos={[x, y, z]}
-            fanAngle={scatter * 0.5}
+            pos={[x, centerY, centerZ]}
+            fromPos={fromAnchor}
+            fanAngle={0}
             zIndex={i}
           />
         );
